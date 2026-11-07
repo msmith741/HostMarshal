@@ -36,6 +36,10 @@
 - Cross-tenant data disclosure and capability discovery caching leaks.
 - Unknown/malicious plugin manifests, undeclared network/filesystem effects.
 
+## Independent schema conformance (M1)
+
+The checked-in `schemas/v1alpha1/resources.schema.json` is compared against the Rust CLI generator. An independently maintained `jsonschema` Draft 2020-12 validator checks both valid and invalid YAML fixtures. This is an additional structural safeguard; schema validity cannot confer invocation rights. Dependency resolution uses the committed application `Cargo.lock` under `--locked`.
+
 ## Evidence and CI
 
 - Gated: format, Clippy warnings-as-errors, tests, schema fixtures, smoke tests, dependency and license audit.

@@ -6,3 +6,5 @@
 /config/local.json
 .idea/
 .DS_Store
+
+.schema-venv/

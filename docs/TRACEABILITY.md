@@ -1,12 +1,12 @@
 # Requirements-to-implementation traceability
 
-**Scope:** M1 declarative capability foundation and configuration hardening; updated 2026-11-07.
+**Scope:** M1 declarative capability foundation and versioned schema release; updated 2026-11-07.
 
 Status definitions: **Implemented (tested)** means corresponding unit/integration checks passed on CI; **In progress** means source exists but milestone acceptance is incomplete; **Planned** means no implementation. This document is not a security certification and should be checked against current CI before relying on the status.
 
 | Requirement | Design authority | Implementation artifact | Verification artifact | M1 status |
 | --- | --- | --- | --- | --- |
-| FR-001 YAML resources | ADR-0003 | `src/declarative.rs`, `src/schema.rs`, `config/v1alpha1/` | `declarative::tests`, `tests/declarative_smoke.py` | In progress — explicit parser budgets, generated Draft 2020-12 schema export, stable effective snapshot digest; checked-in schema distribution and reload pending |
+| FR-001 YAML resources | ADR-0003 | `src/declarative.rs`, `src/schema.rs`, `config/v1alpha1/` | `declarative::tests`, `tests/declarative_smoke.py` | In progress — explicit parser budgets, generated Draft 2020-12 schema export, stable effective snapshot digest; checked-in versioned schema and independent conformance implemented; reload pending |
 | FR-002 dynamic capabilities | ADR-0004 | `src/declarative.rs`, `src/dynamic_mcp.rs` | two-capabilities unit and smoke tests | In progress — builtin static inventory only |
 | FR-003 separation of authorities | ADR-0005 | fixed trusted built-in registry; capability and grant YAML separate | privilege override and denied invocation tests | In progress — deployment lifecycle RBAC not implemented |
 | FR-004 caller identity | ADR-0007 | `src/main.rs` trusted launcher principal | unauthorized subject in declarative smoke | In progress — no remote cryptographic auth |
@@ -23,7 +23,7 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 
 | ADR | Status | Evidence | Remaining |
 | --- | --- | --- | --- |
-| 0003 | Accepted | typed parser, strict resource kinds, resource budgets and snapshot hashing | standalone schema release artifacts, parser fuzzing and atomic reload |
+| 0003 | Accepted | typed parser, strict resource kinds, resource budgets and snapshot hashing | parser fuzzing and atomic reload |
 | 0004 | Accepted | dynamic MCP discovery for one trusted operation | richer signed registry and robust schema subtyping |
 | 0005 | Accepted | separate capability and grant resources; no write MCP tools | admin installation/publication workflows and authorization |
 | 0006 | Accepted | no external runtime plugins, builtin action only | typed adapter SDK and OS-isolated plugin supervisor |
@@ -36,6 +36,13 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 - `hostmarshal config inspect` returns resource counts and digest for trusted local operators without exposing inventory addresses.
 - Rust unit and CLI smoke tests check parser rejection, hash stability under reordering, hash changes with grants, and parseability of the generated schema.
 - Secure atomic reload, external plugin digests, standalone published schemas and durable audit are **not implemented**.
+
+## Schema publication and dependency evidence
+
+- `schemas/v1alpha1/resources.schema.json` contains the versioned, checked-in Draft 2020-12 schema with a fixed apiVersion and stable $id.
+- `src/schema.rs` generates the schema from Rust resource models; CI performs a byte-for-byte drift comparison.
+- `tests/schema_conformance.py` independently checks the schema and positive/negative YAML fixtures using pinned external Python validation libraries. Passing schema validation is **not** authorization.
+- The application has a committed `Cargo.lock`. CI uses `cargo --locked` for metadata, build, Clippy and tests to detect dependency-resolution drift.
 
 ## CI acceptance rules
 

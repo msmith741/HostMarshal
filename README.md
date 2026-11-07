@@ -46,11 +46,12 @@ Legacy JSON and new YAML are intentionally distinct; legacy configuration must n
 
 ~~~sh
 cargo fmt --all -- --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-targets --all-features
-cargo build --bin hostmarshal
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-targets --all-features
+cargo build --locked --bin hostmarshal
 python3 tests/mcp_smoke.py
 python3 tests/declarative_smoke.py
+# Additional schema drift and independent validation run in CI
 ~~~
 
 Licensed under [Apache 2.0](LICENSE).
