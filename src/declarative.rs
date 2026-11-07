@@ -385,15 +385,25 @@ impl CompiledConfig {
         self.authorized_identity("local://trusted-launcher", principal, capability, target)
     }
 
-    pub fn visible_capabilities(&self, principal: &str) -> Vec<&PublishedCapability> {
+    /// The issuer and subject must come from authenticated transport context.
+    pub fn visible_capabilities_for(
+        &self,
+        issuer: &str,
+        principal: &str,
+    ) -> Vec<&PublishedCapability> {
         self.capabilities
             .values()
             .filter(|cap| {
-                self.hosts
-                    .keys()
-                    .any(|host| self.authorized(principal, &cap.name, host))
+                self.hosts.keys().any(|host| {
+                    self.authorized_identity(issuer, principal, &cap.name, host)
+                })
             })
             .collect()
+    }
+
+    /// Compatibility helper for tests modeling the local trusted launcher.
+    pub fn visible_capabilities(&self, principal: &str) -> Vec<&PublishedCapability> {
+        self.visible_capabilities_for("local://trusted-launcher", principal)
     }
 
     #[cfg(test)]
@@ -493,6 +503,18 @@ spec:
                     json!({"target":"alpha","command":"id"})
                 )
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn catalog_never_confuses_identical_subjects_from_different_issuers() {
+        let config = CompiledConfig::compile(parse(&fixture())).unwrap();
+        assert!(config.visible_capabilities_for(
+            "https://different-issuer.example.invalid", "operator"
+        ).is_empty());
+        assert_eq!(
+            config.visible_capabilities_for("local://trusted-launcher", "operator").len(),
+            1
         );
     }
 

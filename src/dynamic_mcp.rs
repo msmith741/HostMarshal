@@ -72,7 +72,7 @@ impl ServerHandler for DeclarativeMcp {
             .snapshot()
             .map(|snapshot| {
                 snapshot
-                    .visible_capabilities(self.caller.subject())
+                    .visible_capabilities_for(self.caller.issuer(), self.caller.subject())
                     .into_iter()
                     .map(|cap| self.definition(cap))
                     .collect()
