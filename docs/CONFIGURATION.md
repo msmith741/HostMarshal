@@ -1,6 +1,6 @@
 # Declarative configuration specification
 
-**Status:** limited M1 YAML loader, CLI validation/inspection, generated JSON Schema export, and deterministic effective snapshot digest exist in pre-alpha. Full specification remains a target design; schema narrowing, checked-in schema releases, secure reload, and lifecycle authorization are not implemented.
+**Status:** limited M1 YAML loader, CLI validation/inspection, generated JSON Schema export, and deterministic effective snapshot digest exist in pre-alpha. Full specification remains a target design; schema narrowing, secure reload, and lifecycle authorization are not implemented. Versioned checked-in schema and external conformance checks are available.
 
 ## Goals and resources
 
@@ -91,4 +91,4 @@ The schema export is derived from the Rust resource types and is structural. Sem
 - A revoked grant takes precedence over a cached registry snapshot; cached authorization must not live past revocation guarantees.
 - An authority-widening manifest or operation update requires administrator reapproval.
 
-See [Capabilities](CAPABILITIES.md) and [examples](../examples/proposed-v1alpha1/README.md).
+See [Schema Export](SCHEMA_EXPORT.md) for the versioned checked-in artifact and independent validation. See [Capabilities](CAPABILITIES.md) and [examples](../examples/proposed-v1alpha1/README.md).

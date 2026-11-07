@@ -1,26 +1,45 @@
-# Machine-readable YAML resource schemas
+# Machine-readable HostMarshal configuration schema
 
-**Status:** pre-alpha schema export available through the local CLI. Standalone checked-in schema bundles and external-validator conformance tests remain future milestones.
+**Status:** Versioned, checked-in **v1alpha1** resource schema and independent schema-conformance CI are implemented. This validates structural configuration, **not** authorization, identity, plugin safety, or the source of config.
 
-Export a **JSON Schema Draft 2020-12** document from the currently compiled Rust Serde resource definitions:
+## Published artifact
 
-~~~sh
-cargo run -- config schema > hostmarshal-v1alpha1.schema.json
-~~~
+- [schemas/v1alpha1/resources.schema.json](../schemas/v1alpha1/resources.schema.json) — JSON Schema Draft 2020-12, with stable `$id` `urn:hostmarshal:schemas:v1alpha1:resource`.
+- The schema covers the three resource kinds implemented now: `Host`, `Capability`, and `Grant`; each has a fixed `apiVersion: hostmarshal.io/v1alpha1`.
+- The schema is **derived from Rust Serde models**, version constrained, and committed to source control.
 
-Editors and external tooling may use the generated schema for structural validation and completion. The schema models `Host`, `Capability`, and `Grant` document variants.
-
-**A document valid against the JSON Schema is not automatically trusted, executable or authorized.** Rust validation additionally checks installed operation IDs, exact input/output contracts, cross-resource references, issuer restrictions, limits, and grants. Capability declarations never grant themselves execution permissions.
-
-For trusted local configurations:
+Regenerate and verify the committed artifact:
 
 ~~~sh
-cargo run -- config validate config/v1alpha1
-cargo run -- config inspect config/v1alpha1
+cargo run --locked --quiet -- config schema > /tmp/resources.schema.json
+diff -u schemas/v1alpha1/resources.schema.json /tmp/resources.schema.json
 ~~~
 
-`config inspect` returns resource counts and a SHA-256 digest of the normalized effective snapshot. Reordering manifests should not change the digest, while altering an effective grant should. This digest is not a cryptographic signature, attestation of source authorship, or verification of installed code provenance.
+CI automatically fails on drift between the generated schema and checked-in artifact.
 
-The parser rejects YAML aliases, anchors, merge keys and unsupported custom tags, and imposes limits on depth, input bytes, documents, nodes and events. Configuration file permissions and trusted launchers remain necessary; cross-platform TOCTOU file protection is still pending.
+## Independent conformance
 
-See [Configuration](CONFIGURATION.md), [Traceability](TRACEABILITY.md), and [ADR-0003](adr/0003-versioned-yaml-resources.md).
+CI validates the schema through the separate Python `jsonschema` Draft 2020-12 implementation, not Rust Serde. It checks the three real YAML examples, malformed resource types, extra executable fields, unsupported versions, and incorrect value types:
+
+~~~sh
+python3 -m venv .schema-venv
+.schema-venv/bin/pip install 'jsonschema==4.25.1' 'PyYAML==6.0.3'
+.schema-venv/bin/python tests/schema_conformance.py
+~~~
+
+The Python test rejects external schema references, keeping schema validation self-contained. This is separate from Rust's security-sensitive semantic validation.
+
+**Important:** Being schema-valid does not confer execution permission. Cross-document grants, installed operation references, schema identity and target authorization are enforced by HostMarshal's trusted compiler and runtime. In the current M1 subset, capability input/output schemas must still exactly equal the vetted operation descriptor.
+
+## Versioning and compatibility
+
+Resource schemas are versioned by their directory and `apiVersion`; future versions should be published alongside existing ones, not silently replace them. The `Cargo.lock` file is committed for repeatable dependency resolution, and CI uses `--locked`. This is not a bit-for-bit reproducible build guarantee.
+
+## Deployment example
+
+~~~sh
+cargo run --locked -- config validate config/v1alpha1
+cargo run --locked -- config inspect config/v1alpha1
+~~~
+
+Refer to [Configuration](CONFIGURATION.md), [Traceability](TRACEABILITY.md), [ADR-0003](adr/0003-versioned-yaml-resources.md), and [Security](SECURITY_ARCHITECTURE.md).

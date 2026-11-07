@@ -15,19 +15,28 @@ concurrency:
 
 jobs:
   verify:
-    name: Format, lint and test
+    name: Format, lint, tests and schema conformance
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: Enforce locked dependency resolution
+        run: cargo metadata --locked --format-version 1 > /dev/null
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Lint
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - name: Test
-        run: cargo test --all-targets --all-features
+        run: cargo test --locked --all-targets --all-features
+      - name: Check generated JSON Schema matches versioned artifact
+        run: cargo run --locked --quiet -- config schema | diff -u schemas/v1alpha1/resources.schema.json -
+      - name: Independently validate schema and YAML fixtures
+        run: |
+          python3 -m venv .schema-venv
+          .schema-venv/bin/pip install --disable-pip-version-check -q 'jsonschema==4.25.1' 'PyYAML==6.0.3'
+          .schema-venv/bin/python tests/schema_conformance.py
       - name: Build and exercise MCP over stdio
         run: |
-          cargo build --bin hostmarshal
+          cargo build --locked --bin hostmarshal
           python3 tests/mcp_smoke.py
           python3 tests/declarative_smoke.py

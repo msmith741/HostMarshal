@@ -1,0 +1,237 @@
+{
+  "$defs": {
+    "CapabilitySpec": {
+      "additionalProperties": false,
+      "properties": {
+        "exposure": {
+          "$ref": "#/$defs/Exposure"
+        },
+        "inputSchema": true,
+        "limits": {
+          "$ref": "#/$defs/Limits"
+        },
+        "operationRef": {
+          "type": "string"
+        },
+        "outputSchema": true,
+        "targetKind": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operationRef",
+        "targetKind",
+        "exposure",
+        "inputSchema",
+        "outputSchema",
+        "limits"
+      ],
+      "type": "object"
+    },
+    "Exposure": {
+      "additionalProperties": false,
+      "properties": {
+        "mcp": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "mcp"
+      ],
+      "type": "object"
+    },
+    "GrantSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "subjects": {
+          "items": {
+            "$ref": "#/$defs/Subject"
+          },
+          "type": "array"
+        },
+        "targets": {
+          "$ref": "#/$defs/Targets"
+        }
+      },
+      "required": [
+        "subjects",
+        "capabilities",
+        "targets"
+      ],
+      "type": "object"
+    },
+    "HostSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "address"
+      ],
+      "type": "object"
+    },
+    "Limits": {
+      "additionalProperties": false,
+      "properties": {
+        "maxOutputBytes": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "timeout": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "timeout",
+        "maxOutputBytes"
+      ],
+      "type": "object"
+    },
+    "Metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "type": "object"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "Subject": {
+      "additionalProperties": false,
+      "properties": {
+        "issuer": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "issuer",
+        "subject"
+      ],
+      "type": "object"
+    },
+    "Targets": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "names"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:hostmarshal:schemas:v1alpha1:resource",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "apiVersion": {
+          "const": "hostmarshal.io/v1alpha1",
+          "type": "string"
+        },
+        "kind": {
+          "const": "Host",
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/$defs/Metadata"
+        },
+        "spec": {
+          "$ref": "#/$defs/HostSpec"
+        }
+      },
+      "required": [
+        "kind",
+        "apiVersion",
+        "metadata",
+        "spec"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "apiVersion": {
+          "const": "hostmarshal.io/v1alpha1",
+          "type": "string"
+        },
+        "kind": {
+          "const": "Capability",
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/$defs/Metadata"
+        },
+        "spec": {
+          "$ref": "#/$defs/CapabilitySpec"
+        }
+      },
+      "required": [
+        "kind",
+        "apiVersion",
+        "metadata",
+        "spec"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "apiVersion": {
+          "const": "hostmarshal.io/v1alpha1",
+          "type": "string"
+        },
+        "kind": {
+          "const": "Grant",
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/$defs/Metadata"
+        },
+        "spec": {
+          "$ref": "#/$defs/GrantSpec"
+        }
+      },
+      "required": [
+        "kind",
+        "apiVersion",
+        "metadata",
+        "spec"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "Resource"
+}

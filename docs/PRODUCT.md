@@ -29,7 +29,10 @@ HostMarshal provides **typed, authorized, auditable infrastructure operations** 
 | FR-009 | Emit audit outcomes and correlation IDs for decisions and execution | M2 |
 | FR-010 | Publish CLI validation and policy explanation without live credentials | M1–M2 |
 | FR-011 | Support backwards-compatible MCP clients where feasible | M1 |
-| FR-012 | Define versioned, isolated external plugin interfaces | M4 |
+| FR-012 | Define versioned, isolated external plugin interfaces | M5 |
+| FR-013 | Publish versioned config schemas with independent conformance and drift checks | M1 |
+| FR-014 | Atomically activate validated snapshots and define emergency revocation semantics | M1 |
+| FR-015 | Lock application dependencies and exercise parser fuzzing and supported MCP eras | M1 |
 
 ## Non-functional requirements
 
