@@ -15,7 +15,7 @@ use rmcp::transport::streamable_http_server::{
     StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
 };
 
-use crate::{http_auth::JwtVerifier, runtime::ExecutionCoordinator, dynamic_mcp::DeclarativeMcp};
+use crate::{dynamic_mcp::DeclarativeMcp, http_auth::JwtVerifier, runtime::ExecutionCoordinator};
 
 async fn authenticate_request(
     State(verifier): State<Arc<JwtVerifier>>,
@@ -26,15 +26,21 @@ async fn authenticate_request(
     // from an untrusted source without the mandatory TLS boundary.
     let headers = request.headers();
     let count = headers.get_all(header::AUTHORIZATION).iter().count();
-    let auth = (count == 1).then(|| headers.get(header::AUTHORIZATION)).flatten()
+    let auth = (count == 1)
+        .then(|| headers.get(header::AUTHORIZATION))
+        .flatten()
         .and_then(|h| h.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "));
     let origin_valid = match headers.get(header::ORIGIN) {
         None => true,
-        Some(v) => v.to_str().ok()
+        Some(v) => v
+            .to_str()
+            .ok()
             .and_then(|origin| url::Url::parse(origin).ok())
             .is_some_and(|origin| {
-                let Ok(resource) = url::Url::parse(verifier.resource()) else { return false };
+                let Ok(resource) = url::Url::parse(verifier.resource()) else {
+                    return false;
+                };
                 origin.scheme() == resource.scheme()
                     && origin.host_str() == resource.host_str()
                     && origin.port_or_known_default() == resource.port_or_known_default()
@@ -50,24 +56,30 @@ async fn authenticate_request(
     };
     request.extensions_mut().insert(caller);
     let mut result = next.run(request).await;
-    result.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    result
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     result
 }
 
 fn unauthorized(verifier: &JwtVerifier) -> Response {
     let mut response = (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
     if let Ok(value) = HeaderValue::from_str(&verifier.challenge()) {
-        response.headers_mut().insert(header::WWW_AUTHENTICATE, value);
+        response
+            .headers_mut()
+            .insert(header::WWW_AUTHENTICATE, value);
     }
-    response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
 }
 
-async fn protected_resource_metadata(
-    State(verifier): State<Arc<JwtVerifier>>,
-) -> Response {
+async fn protected_resource_metadata(State(verifier): State<Arc<JwtVerifier>>) -> Response {
     let mut response = Json(verifier.metadata()).into_response();
-    response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
 }
 
@@ -92,11 +104,18 @@ pub async fn serve(
     let protected = Router::new()
         .nest_service("/mcp", mcp)
         .layer(middleware::from_fn_with_state(
-            Arc::clone(&verifier), authenticate_request,
+            Arc::clone(&verifier),
+            authenticate_request,
         ));
     let router = Router::new()
-        .route("/.well-known/oauth-protected-resource", get(protected_resource_metadata))
-        .route("/.well-known/oauth-protected-resource/mcp", get(protected_resource_metadata))
+        .route(
+            "/.well-known/oauth-protected-resource",
+            get(protected_resource_metadata),
+        )
+        .route(
+            "/.well-known/oauth-protected-resource/mcp",
+            get(protected_resource_metadata),
+        )
         .with_state(Arc::clone(&verifier))
         .merge(protected);
     let tcp = tokio::net::TcpListener::bind(bind).await?;
