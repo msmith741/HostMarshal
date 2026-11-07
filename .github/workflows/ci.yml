@@ -42,6 +42,7 @@ jobs:
           python3 tests/declarative_smoke.py
           python3 tests/reload_smoke.py
           python3 tests/mcp_modern_smoke.py
+          python3 tests/audit_smoke.py
 
   fuzz-smoke:
     name: Coverage-guided fuzz target smoke

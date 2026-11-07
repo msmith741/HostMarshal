@@ -2,9 +2,16 @@
 use std::path::PathBuf;
 use std::{env, path::Path, sync::Arc};
 
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, bail};
 use hostmarshal::{
-    HostMarshal, config::Config, declarative::CompiledConfig, dynamic_mcp::DeclarativeMcp,
+    HostMarshal,
+    audit::{AuditSink, JsonlFileAudit, StderrAudit},
+    config::Config,
+    credentials::DenyCredentialBroker,
+    declarative::CompiledConfig,
+    dynamic_mcp::DeclarativeMcp,
+    identity::AuthenticatedCaller,
+    runtime::ExecutionCoordinator,
     snapshot::ConfigStore,
 };
 use rmcp::{ServiceExt, transport::stdio};
@@ -25,7 +32,6 @@ async fn main() -> Result<()> {
             Ok(())
         }
         [command, inspect, directory] if command == "config" && inspect == "inspect" => {
-            // This is an administrative local CLI operation, not an MCP tool.
             let config = CompiledConfig::load(Path::new(directory))?;
             println!(
                 "{}",
@@ -46,29 +52,18 @@ async fn main() -> Result<()> {
         [flag, directory, principal_flag, principal]
             if flag == "--config-dir" && principal_flag == "--principal" =>
         {
-            ensure!(
-                !principal.is_empty()
-                    && principal.len() <= 128
-                    && principal
-                        .bytes()
-                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_')),
-                "invalid launcher principal"
-            );
-            // A trusted launcher must choose both directory and principal. MCP cannot change them.
-            let config = CompiledConfig::load(Path::new(directory))?;
-            let store = Arc::new(ConfigStore::new(config));
-            #[cfg(unix)]
-            register_reload_signals(Arc::clone(&store), PathBuf::from(directory))?;
-            #[cfg(not(unix))]
-            eprintln!("hostmarshal: signal reload unavailable; restart required");
-            let server = DeclarativeMcp::new(store, principal.clone())
-                .serve(stdio())
-                .await?;
-            server.waiting().await?;
-            Ok(())
+            serve_declarative(directory, principal, None).await
+        }
+        [flag, directory, principal_flag, principal, audit_flag, audit_path]
+            if flag == "--config-dir"
+                && principal_flag == "--principal"
+                && audit_flag == "--audit-log" =>
+        {
+            serve_declarative(directory, principal, Some(audit_path)).await
         }
         [flag, path] if flag == "--config" => {
             // Legacy pre-alpha JSON mode retained temporarily for migration.
+            // Legacy mode does not have M2 execution/audit guarantees.
             let config = Config::load(Path::new(path))?;
             let server = HostMarshal::new(config).serve(stdio()).await?;
             server.waiting().await?;
@@ -78,18 +73,43 @@ async fn main() -> Result<()> {
             "usage: hostmarshal config validate <directory> | \
              hostmarshal config inspect <directory> | \
              hostmarshal config schema | \
-             hostmarshal --config-dir <directory> --principal <trusted-launcher-subject> | \
+             hostmarshal --config-dir <directory> --principal <trusted-launcher-subject> \
+             [--audit-log <protected-file-path>] | \
              hostmarshal --config <legacy-config.json>"
         ),
     }
+}
+
+async fn serve_declarative(directory: &str, principal: &str, audit_path: Option<&str>) -> Result<()> {
+    // Caller identity and audit destination are bound by the trusted launcher.
+    // No MCP message can choose or modify either value.
+    let caller = AuthenticatedCaller::from_trusted_launcher(principal)?;
+    let config = CompiledConfig::load(Path::new(directory))?;
+    let store = Arc::new(ConfigStore::new(config));
+    let audit: Arc<dyn AuditSink> = match audit_path {
+        Some(path) => Arc::new(JsonlFileAudit::open(Path::new(path))?),
+        None => Arc::new(StderrAudit),
+    };
+    let runtime = Arc::new(ExecutionCoordinator::new(
+        Arc::clone(&store),
+        Arc::new(DenyCredentialBroker),
+        audit,
+    ));
+    #[cfg(unix)]
+    register_reload_signals(Arc::clone(&store), PathBuf::from(directory))?;
+    #[cfg(not(unix))]
+    eprintln!("hostmarshal: signal reload unavailable; restart required");
+    let server = DeclarativeMcp::new(runtime, caller).serve(stdio()).await?;
+    server.waiting().await?;
+    Ok(())
 }
 
 #[cfg(unix)]
 fn register_reload_signals(store: Arc<ConfigStore>, directory: PathBuf) -> Result<()> {
     use tokio::signal::unix::{SignalKind, signal};
 
-    // OS-level process signaling is the *only* reload control for stdio mode.
-    // A client cannot select a configuration path, signal, or new principal.
+    // Only the host OS can authorize signals in this stdio deployment mode.
+    // A client cannot select a config directory, signal or new principal.
     let mut hangup = signal(SignalKind::hangup())?;
     let mut emergency = signal(SignalKind::user_defined1())?;
     tokio::spawn(async move {
@@ -100,12 +120,10 @@ fn register_reload_signals(store: Arc<ConfigStore>, directory: PathBuf) -> Resul
                         break;
                     }
                     match store.reload(&directory) {
-                        Ok(outcome) => {
-                            eprintln!("hostmarshal: reload {outcome:?}");
-                        }
-                        Err(error) => {
-                            eprintln!("hostmarshal: reload rejected; last valid snapshot retained: {error:#}");
-                        }
+                        Ok(outcome) => eprintln!("hostmarshal: reload {outcome:?}"),
+                        Err(error) => eprintln!(
+                            "hostmarshal: reload rejected; last valid snapshot retained: {error:#}"
+                        ),
                     }
                 }
                 received = emergency.recv() => {
