@@ -16,8 +16,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install nightly compiler
-        run: rustup toolchain install nightly --profile minimal
+        run: rustup toolchain install nightly-2026-11-06 --profile minimal
       - name: Install pinned cargo-fuzz
-        run: cargo +nightly install cargo-fuzz --locked --version 0.13.2
+        run: cargo +nightly-2026-11-06 install cargo-fuzz --locked --version 0.13.2
       - name: Run bounded coverage-guided campaign
-        run: cargo +nightly fuzz run yaml_manifest -- -max_total_time=60 -timeout=5 -max_len=8192
+        run: cargo +nightly-2026-11-06 fuzz run yaml_manifest -- -max_total_time=60 -timeout=5 -max_len=8192
