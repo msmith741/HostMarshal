@@ -10,7 +10,10 @@ use hostmarshal::{
     declarative::CompiledConfig,
     dynamic_mcp::DeclarativeMcp,
     identity::AuthenticatedCaller,
+    http_auth::JwtVerifier,
+    http_server,
     runtime::ExecutionCoordinator,
+    vault::VaultSshCertBroker,
     snapshot::ConfigStore,
 };
 use rmcp::{ServiceExt, transport::stdio};
@@ -99,11 +102,47 @@ async fn main() -> Result<()> {
             );
             Ok(())
         }
+        [http, serve, dir, bind_flag, bind, issuer_flag, issuer,
+            resource_flag, resource, jwks_flag, jwks, rest @ ..]
+            if http == "http" && serve == "serve"
+                && bind_flag == "--bind" && issuer_flag == "--issuer"
+                && resource_flag == "--resource" && jwks_flag == "--jwks-file" =>
+        {
+            let mut audit_path = None;
+            let mut ssh_map = None;
+            let mut vault_map = None;
+            let mut options = rest;
+            while !options.is_empty() {
+                let [option, value, tail @ ..] = options else {
+                    bail!("expected value after HTTP option");
+                };
+                match option.as_str() {
+                    "--audit-log" if audit_path.is_none() => audit_path = Some(value.as_str()),
+                    "--ssh-credential-map" if ssh_map.is_none() => ssh_map = Some(value.as_str()),
+                    "--vault-ssh-config" if vault_map.is_none() => vault_map = Some(value.as_str()),
+                    _ => bail!("unknown or duplicate HTTP option"),
+                };
+                options = tail;
+            }
+            let bind: std::net::SocketAddr = bind.parse()?;
+            let verifier = Arc::new(JwtVerifier::load(issuer, resource, Path::new(jwks))?);
+            let store = Arc::new(ConfigStore::new(CompiledConfig::load(Path::new(dir))?));
+            let audit: Arc<dyn AuditSink> = match audit_path {
+                Some(path) => Arc::new(JsonlFileAudit::open(Path::new(path))?),
+                None => Arc::new(StderrAudit),
+            };
+            let broker = choose_broker(ssh_map, vault_map)?;
+            let runtime = Arc::new(ExecutionCoordinator::new(Arc::clone(&store), broker, audit));
+            #[cfg(unix)]
+            register_reload_signals(Arc::clone(&store), PathBuf::from(dir))?;
+            http_server::serve(bind, runtime, verifier).await
+        }
         [flag, directory, principal_flag, principal, rest @ ..]
             if flag == "--config-dir" && principal_flag == "--principal" =>
         {
             let mut audit_path = None;
             let mut ssh_map = None;
+            let mut vault_map = None;
             let mut remaining = rest;
             while !remaining.is_empty() {
                 let [option, value, tail @ ..] = remaining else {
@@ -112,11 +151,12 @@ async fn main() -> Result<()> {
                 match option.as_str() {
                     "--audit-log" if audit_path.is_none() => audit_path = Some(value.as_str()),
                     "--ssh-credential-map" if ssh_map.is_none() => ssh_map = Some(value.as_str()),
+                    "--vault-ssh-config" if vault_map.is_none() => vault_map = Some(value.as_str()),
                     _ => bail!("unknown or duplicate server option"),
                 };
                 remaining = tail;
             }
-            serve_declarative(directory, principal, audit_path, ssh_map).await
+            serve_declarative(directory, principal, audit_path, ssh_map, vault_map).await
         }
         _ => bail!(
             "usage: hostmarshal config validate <directory> | \
@@ -124,9 +164,14 @@ async fn main() -> Result<()> {
              hostmarshal config schema | \
              hostmarshal policy explain <directory> --subject <launcher-subject> \
                  --capability <name> --target <host-id> | \
+             hostmarshal http serve <config-dir> --bind <127.0.0.1:port> \
+               --issuer <https://identity-provider> --resource <https://hostname/mcp> \
+               --jwks-file <protected-public-keys.json> [--audit-log <path>] \
+               [--vault-ssh-config <protected-json-file>] | \
              hostmarshal --config-dir <directory> --principal <trusted-launcher-subject> \
              [--audit-log <protected-file-path>] \
-             [--ssh-credential-map <protected-json-file>] | \
+             [--ssh-credential-map <protected-json-file> | \
+              --vault-ssh-config <protected-json-file>] | \
              Use YAML resources; legacy --config JSON mode has been retired"
         ),
     }
@@ -137,6 +182,7 @@ async fn serve_declarative(
     principal: &str,
     audit_path: Option<&str>,
     ssh_map: Option<&str>,
+    vault_map: Option<&str>,
 ) -> Result<()> {
     // Caller identity and audit destination are bound by the trusted launcher.
     // No MCP message can choose or modify either value.
@@ -147,10 +193,7 @@ async fn serve_declarative(
         Some(path) => Arc::new(JsonlFileAudit::open(Path::new(path))?),
         None => Arc::new(StderrAudit),
     };
-    let broker: Arc<dyn CredentialBroker> = match ssh_map {
-        Some(path) => Arc::new(LocalSshKeyBroker::load(Path::new(path))?),
-        None => Arc::new(DenyCredentialBroker),
-    };
+    let broker = choose_broker(ssh_map, vault_map)?;
     let runtime = Arc::new(ExecutionCoordinator::new(Arc::clone(&store), broker, audit));
     #[cfg(unix)]
     register_reload_signals(Arc::clone(&store), PathBuf::from(directory))?;
@@ -159,6 +202,19 @@ async fn serve_declarative(
     let server = DeclarativeMcp::new(runtime, caller).serve(stdio()).await?;
     server.waiting().await?;
     Ok(())
+}
+
+/// Credential backend selection is administrative, exclusive and fail closed.
+fn choose_broker(
+    ssh_map: Option<&str>,
+    vault_map: Option<&str>,
+) -> Result<Arc<dyn CredentialBroker>> {
+    match (ssh_map, vault_map) {
+        (Some(_), Some(_)) => bail!("choose only one SSH credential provider"),
+        (Some(path), None) => Ok(Arc::new(LocalSshKeyBroker::load(Path::new(path))?)),
+        (None, Some(path)) => Ok(Arc::new(VaultSshCertBroker::load(Path::new(path))?)),
+        (None, None) => Ok(Arc::new(DenyCredentialBroker)),
+    }
 }
 
 #[cfg(unix)]

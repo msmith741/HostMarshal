@@ -98,7 +98,8 @@ def start_ssh(root):
             "-f", str(root / "host_key"))
     command("ssh-keygen", "-q", "-t", "ed25519", "-N", "",
             "-f", str(root / "other_host_key"))
-    command("sudo", "useradd", "-m", "-s", "/bin/sh", USER)
+    if subprocess.run(["id", "-u", USER], capture_output=True).returncode != 0:
+        command("sudo", "useradd", "-m", "-s", "/bin/sh", USER)
     # Random ephemeral test-only password, password authentication disabled.
     command("sudo", "chpasswd", input_text=f"{USER}:{os.urandom(24).hex()}\n")
     command("sudo", "install", "-d", "-m", "0755", "/run/sshd")

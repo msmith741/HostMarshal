@@ -334,7 +334,9 @@ impl CompiledConfig {
                     );
                     for s in &spec.subjects {
                         ensure!(
-                            s.issuer == "local://trusted-launcher" && valid_name(&s.subject),
+                            (s.issuer == "local://trusted-launcher"
+                                || crate::identity::valid_remote_issuer(&s.issuer))
+                                && valid_name(&s.subject),
                             "unsupported subject identity"
                         );
                     }

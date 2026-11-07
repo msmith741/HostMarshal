@@ -16,6 +16,8 @@ pub struct CredentialScope {
     operation: String,
     target: String,
     purpose: String,
+    issuer: Option<String>,
+    subject: Option<String>,
 }
 
 impl CredentialScope {
@@ -24,8 +26,28 @@ impl CredentialScope {
             operation: operation.to_owned(),
             target: target.to_owned(),
             purpose: purpose.to_owned(),
+            issuer: None,
+            subject: None,
         }
     }
+
+    /// Correlates a scoped request to the runtime-verified user/agent actor.
+    /// No transport may provide these fields through MCP input.
+    pub(crate) fn for_caller(
+        operation: &str,
+        target: &str,
+        purpose: &str,
+        issuer: &str,
+        subject: &str,
+    ) -> Self {
+        let mut scope = Self::new(operation, target, purpose);
+        scope.issuer = Some(issuer.to_owned());
+        scope.subject = Some(subject.to_owned());
+        scope
+    }
+
+    pub fn issuer(&self) -> Option<&str> { self.issuer.as_deref() }
+    pub fn subject(&self) -> Option<&str> { self.subject.as_deref() }
 
     pub fn operation(&self) -> &str {
         &self.operation
@@ -42,6 +64,7 @@ impl CredentialScope {
 pub struct CredentialLease {
     scope: CredentialScope,
     opaque_handle: String,
+    certificate_file: Option<tempfile::NamedTempFile>,
 }
 
 impl CredentialLease {
@@ -49,7 +72,21 @@ impl CredentialLease {
         Self {
             scope,
             opaque_handle: handle,
+            certificate_file: None,
         }
+    }
+
+    /// A short-lived certificate is deleted when this operation's lease drops.
+    pub(crate) fn with_signed_certificate(
+        scope: CredentialScope,
+        key_path: String,
+        cert_file: tempfile::NamedTempFile,
+    ) -> Self {
+        Self { scope, opaque_handle: key_path, certificate_file: Some(cert_file) }
+    }
+
+    pub fn certificate_path(&self) -> Option<&Path> {
+        self.certificate_file.as_ref().map(|file| file.path())
     }
 
     #[cfg(test)]

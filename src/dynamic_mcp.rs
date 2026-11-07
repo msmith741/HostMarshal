@@ -20,12 +20,29 @@ use crate::{
 #[derive(Clone)]
 pub struct DeclarativeMcp {
     runtime: Arc<ExecutionCoordinator>,
-    caller: AuthenticatedCaller,
+    caller: Option<AuthenticatedCaller>,
 }
 
 impl DeclarativeMcp {
     pub fn new(runtime: Arc<ExecutionCoordinator>, caller: AuthenticatedCaller) -> Self {
-        Self { runtime, caller }
+        Self { runtime, caller: Some(caller) }
+    }
+
+    /// A stateless HTTP handler binds identity on each validated HTTP request.
+    pub fn for_authenticated_http(runtime: Arc<ExecutionCoordinator>) -> Self {
+        Self { runtime, caller: None }
+    }
+
+    fn caller_for(&self, context: &RequestContext<RoleServer>) -> Option<AuthenticatedCaller> {
+        if let Some(caller) = &self.caller {
+            return Some(caller.clone());
+        }
+        // Only the authenticated axum middleware inserts this opaque type.
+        // Raw client headers, clientInfo, MCP params and request IDs are NOT identity.
+        context.extensions
+            .get::<axum::http::request::Parts>()
+            .and_then(|parts| parts.extensions.get::<AuthenticatedCaller>())
+            .cloned()
     }
 
     fn definition(&self, cap: &PublishedCapability) -> Tool {
@@ -41,8 +58,9 @@ impl DeclarativeMcp {
 
     fn authorized_tool(&self, snapshot: &CompiledConfig, name: &str) -> Option<Tool> {
         let cap = snapshot.capabilities.get(name)?;
+        let caller = self.caller.as_ref()?;
         snapshot
-            .visible_capabilities(self.caller.subject())
+            .visible_capabilities_for(caller.issuer(), caller.subject())
             .iter()
             .any(|visible| visible.name == name)
             .then(|| self.definition(cap))
@@ -64,15 +82,18 @@ impl ServerHandler for DeclarativeMcp {
     async fn list_tools(
         &self,
         _request: Option<PaginatedRequestParams>,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
+        let caller = self.caller_for(&context).ok_or_else(|| {
+            McpError::internal_error("authenticated HTTP caller unavailable", None)
+        })?;
         let tools = self
             .runtime
             .store()
             .snapshot()
             .map(|snapshot| {
                 snapshot
-                    .visible_capabilities_for(self.caller.issuer(), self.caller.subject())
+                    .visible_capabilities_for(caller.issuer(), caller.subject())
                     .into_iter()
                     .map(|cap| self.definition(cap))
                     .collect()
@@ -90,10 +111,13 @@ impl ServerHandler for DeclarativeMcp {
     ) -> Result<CallToolResponse, McpError> {
         // Intentionally do not short-circuit hidden tool names: the coordinator
         // must record denied invocations as well as successful ones.
+        let caller = self.caller_for(&context).ok_or_else(|| {
+            McpError::internal_error("authenticated HTTP caller unavailable", None)
+        })?;
         let input = Value::Object(request.arguments.unwrap_or_default());
         let result = match self
             .runtime
-            .invoke(&self.caller, request.name.as_ref(), input)
+            .invoke(&caller, request.name.as_ref(), input)
             .await
         {
             Ok(data) => CallToolResult::structured(data),
