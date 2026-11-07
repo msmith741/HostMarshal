@@ -20,6 +20,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Generate review artifacts (temporary bootstrap step)
+        run: |
+          cargo generate-lockfile
+          echo 'SCHEMA_BEGIN'
+          cargo run --quiet -- config schema | sed 's/^/SCHEMA_LINE /'
+          echo 'SCHEMA_END'
+          echo 'LOCK_BEGIN'
+          base64 -w0 Cargo.lock | fold -w 120 | sed 's/^/LOCK64 /'
+          echo 'LOCK_END'
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Lint
