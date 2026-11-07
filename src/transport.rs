@@ -34,14 +34,18 @@ pub fn valid_host_address(address: &str) -> bool {
             && label.len() <= 63
             && !label.starts_with('-')
             && !label.ends_with('-')
-            && label.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+            && label
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
     })
 }
 
 fn valid_username(user: &str) -> bool {
     !user.is_empty()
         && user.len() <= 32
-        && user.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
+        && user
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
         && !user.starts_with('-')
 }
 
@@ -53,7 +57,10 @@ pub fn validate_transport(
     if ssh.is_none() && https.is_none() {
         return Ok(());
     }
-    ensure!(valid_host_address(address), "invalid network target address");
+    ensure!(
+        valid_host_address(address),
+        "invalid network target address"
+    );
     if let Some(ssh) = ssh {
         ensure!(ssh.port != 0, "SSH port must be nonzero");
         ensure!(valid_username(&ssh.user), "invalid SSH username");
@@ -65,7 +72,10 @@ pub fn validate_transport(
     if let Some(https) = https {
         ensure!(https.port != 0, "HTTPS port must be nonzero");
         if let Some(path) = &https.ca_certificate_file {
-            ensure!(Path::new(path).is_absolute(), "HTTPS CA file must use an absolute path");
+            ensure!(
+                Path::new(path).is_absolute(),
+                "HTTPS CA file must use an absolute path"
+            );
         }
     }
     Ok(())
@@ -82,7 +92,9 @@ pub fn check_public_trust_file(path: &Path) -> std::io::Result<()> {
     {
         use std::os::unix::fs::PermissionsExt;
         if meta.permissions().mode() & 0o022 != 0 {
-            return Err(std::io::Error::other("trust file is writable by group/other"));
+            return Err(std::io::Error::other(
+                "trust file is writable by group/other",
+            ));
         }
     }
     Ok(())
@@ -94,9 +106,15 @@ mod tests {
     #[test]
     fn only_validated_addresses_can_be_transport_endpoints() {
         for invalid in [
-            "-oProxyCommand=whoami", "host:22", "https://example.com",
-            "example.com/path", "x@host", "localhost\n-o", "a..b",
-            "0.0.0.0#fragment", "[::1]",
+            "-oProxyCommand=whoami",
+            "host:22",
+            "https://example.com",
+            "example.com/path",
+            "x@host",
+            "localhost\n-o",
+            "a..b",
+            "0.0.0.0#fragment",
+            "[::1]",
         ] {
             assert!(!valid_host_address(invalid), "{invalid}");
         }

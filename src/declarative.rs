@@ -6,13 +6,16 @@ use std::{
     path::Path,
 };
 
+use crate::{
+    adapter,
+    transport::{HttpsEndpoint, SshEndpoint, validate_transport},
+};
 #[cfg(test)]
 use anyhow::bail;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use crate::{adapter, transport::{SshEndpoint, HttpsEndpoint, validate_transport}};
 
 const MAX_FILE_BYTES: u64 = 128 * 1024;
 const MAX_FILES: usize = 128;
@@ -147,7 +150,9 @@ fn valid_name(s: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_'))
 }
 
-pub fn input_schema() -> Value { adapter::trusted_input_schema() }
+pub fn input_schema() -> Value {
+    adapter::trusted_input_schema()
+}
 
 pub fn output_schema() -> Value {
     adapter::trusted_output_schema(OPERATION).expect("built-in descriptor must have schema")
@@ -263,18 +268,31 @@ impl CompiledConfig {
                     // manifest authors cannot publish executable code or relax risk.
                     let desc = adapter::descriptor(&spec.operation_ref)
                         .ok_or_else(|| anyhow::anyhow!("unknown/unapproved operationRef"))?;
-                    ensure!(spec.target_kind == desc.supported_target_kind, "unsupported target kind");
-                    ensure!(spec.input_schema == adapter::trusted_input_schema(),
-                        "input schema cannot override trusted operation");
+                    ensure!(
+                        spec.target_kind == desc.supported_target_kind,
+                        "unsupported target kind"
+                    );
+                    ensure!(
+                        spec.input_schema == adapter::trusted_input_schema(),
+                        "input schema cannot override trusted operation"
+                    );
                     let trusted_output = adapter::trusted_output_schema(desc.id)
                         .ok_or_else(|| anyhow::anyhow!("missing trusted output schema"))?;
-                    ensure!(spec.output_schema == trusted_output,
-                        "output schema cannot override trusted operation");
-                    let seconds: u64 = spec.limits.timeout.strip_suffix('s')
+                    ensure!(
+                        spec.output_schema == trusted_output,
+                        "output schema cannot override trusted operation"
+                    );
+                    let seconds: u64 = spec
+                        .limits
+                        .timeout
+                        .strip_suffix('s')
                         .ok_or_else(|| anyhow::anyhow!("invalid operation timeout"))?
-                        .parse().context("invalid numeric operation timeout")?;
-                    ensure!(seconds > 0 && seconds <= desc.max_timeout.as_secs(),
-                        "operation timeout exceeds trusted maximum");
+                        .parse()
+                        .context("invalid numeric operation timeout")?;
+                    ensure!(
+                        seconds > 0 && seconds <= desc.max_timeout.as_secs(),
+                        "operation timeout exceeds trusted maximum"
+                    );
                     ensure!(
                         spec.limits.max_output_bytes > 0
                             && spec.limits.max_output_bytes <= desc.max_output_bytes,
@@ -359,8 +377,7 @@ impl CompiledConfig {
             grant.targets.names.sort();
         }
         grants.sort();
-        let canonical =
-            serde_json::to_vec(&(API_VERSION, &hosts, &capabilities, &grants))?;
+        let canonical = serde_json::to_vec(&(API_VERSION, &hosts, &capabilities, &grants))?;
         let mut hash = Sha256::new();
         hash.update(b"hostmarshal-snapshot-v1\0");
         hash.update(canonical);

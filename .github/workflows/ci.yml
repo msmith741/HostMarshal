@@ -20,15 +20,6 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: M3 bootstrap generated artifacts
-        run: |
-          cargo generate-lockfile
-          echo 'M3_LOCK_BEGIN'
-          base64 -w0 Cargo.lock | fold -w 120 | sed 's/^/M3_LOCK64 /'
-          echo 'M3_LOCK_END'
-          echo 'M3_SCHEMA_BEGIN'
-          cargo run --quiet -- config schema | sed 's/^/M3_SCHEMA_LINE /'
-          echo 'M3_SCHEMA_END'
       - name: Enforce locked dependency resolution
         run: cargo metadata --locked --format-version 1 > /dev/null
       - name: Check formatting
@@ -44,6 +35,10 @@ jobs:
           python3 -m venv .schema-venv
           .schema-venv/bin/pip install --disable-pip-version-check -q 'jsonschema==4.25.1' 'PyYAML==6.0.3'
           .schema-venv/bin/python tests/schema_conformance.py
+      - name: Install isolated SSH test daemon
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server
       - name: Build and exercise MCP over stdio
         run: |
           cargo build --locked --bin hostmarshal
@@ -53,6 +48,7 @@ jobs:
           python3 tests/mcp_modern_smoke.py
           python3 tests/audit_smoke.py
           python3 tests/policy_explain_smoke.py
+          python3 tests/transport_smoke.py
 
   fuzz-smoke:
     name: Coverage-guided fuzz target smoke

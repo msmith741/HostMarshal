@@ -4,13 +4,25 @@ use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc, time::Dura
 
 use serde_json::{Value, json};
 
-use crate::{credentials::CredentialLease, transport::{SshEndpoint, HttpsEndpoint}};
+use crate::{
+    credentials::CredentialLease,
+    transport::{HttpsEndpoint, SshEndpoint},
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EffectClass { Observe, Diagnose, Mutate, Privileged, Destructive }
+pub enum EffectClass {
+    Observe,
+    Diagnose,
+    Mutate,
+    Privileged,
+    Destructive,
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CredentialRequirement { None, Scoped { purpose: &'static str } }
+pub enum CredentialRequirement {
+    None,
+    Scoped { purpose: &'static str },
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct OperationDescriptor {
@@ -36,7 +48,9 @@ pub const LINUX_UNAME: OperationDescriptor = OperationDescriptor {
     supported_target_kind: "Host",
     max_timeout: Duration::from_secs(5),
     max_output_bytes: 4096,
-    credential: CredentialRequirement::Scoped { purpose: "ssh-observe" },
+    credential: CredentialRequirement::Scoped {
+        purpose: "ssh-observe",
+    },
 };
 pub const HTTPS_HEALTH: OperationDescriptor = OperationDescriptor {
     id: "builtin.https.health/v1",
@@ -103,7 +117,11 @@ pub struct AdapterInvocation {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AdapterFailure { Unavailable, Rejected, Failed }
+pub enum AdapterFailure {
+    Unavailable,
+    Rejected,
+    Failed,
+}
 
 pub trait OperationAdapter: Send + Sync {
     fn descriptor(&self) -> &'static OperationDescriptor;
@@ -138,12 +156,17 @@ impl TrustedAdapterCatalog {
 
 struct InventoryInspect;
 impl OperationAdapter for InventoryInspect {
-    fn descriptor(&self) -> &'static OperationDescriptor { &INVENTORY_INSPECT }
-    fn execute(&self, request: AdapterInvocation)
-        -> Pin<Box<dyn Future<Output = Result<Value, AdapterFailure>> + Send + '_>>
-    {
+    fn descriptor(&self) -> &'static OperationDescriptor {
+        &INVENTORY_INSPECT
+    }
+    fn execute(
+        &self,
+        request: AdapterInvocation,
+    ) -> Pin<Box<dyn Future<Output = Result<Value, AdapterFailure>> + Send + '_>> {
         Box::pin(async move {
-            if request.lease.is_some() { return Err(AdapterFailure::Rejected); }
+            if request.lease.is_some() {
+                return Err(AdapterFailure::Rejected);
+            }
             Ok(json!({"id":request.target.id,"hostname":request.target.address}))
         })
     }

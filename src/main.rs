@@ -151,11 +151,7 @@ async fn serve_declarative(
         Some(path) => Arc::new(LocalSshKeyBroker::load(Path::new(path))?),
         None => Arc::new(DenyCredentialBroker),
     };
-    let runtime = Arc::new(ExecutionCoordinator::new(
-        Arc::clone(&store),
-        broker,
-        audit,
-    ));
+    let runtime = Arc::new(ExecutionCoordinator::new(Arc::clone(&store), broker, audit));
     #[cfg(unix)]
     register_reload_signals(Arc::clone(&store), PathBuf::from(directory))?;
     #[cfg(not(unix))]

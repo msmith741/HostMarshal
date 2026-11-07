@@ -27,9 +27,15 @@ impl CredentialScope {
         }
     }
 
-    pub fn operation(&self) -> &str { &self.operation }
-    pub fn target(&self) -> &str { &self.target }
-    pub fn purpose(&self) -> &str { &self.purpose }
+    pub fn operation(&self) -> &str {
+        &self.operation
+    }
+    pub fn target(&self) -> &str {
+        &self.target
+    }
+    pub fn purpose(&self) -> &str {
+        &self.purpose
+    }
 }
 
 /// Opaque reference visible to a trusted in-process adapter, never MCP callers.
@@ -40,7 +46,10 @@ pub struct CredentialLease {
 
 impl CredentialLease {
     pub(crate) fn new_scoped(scope: CredentialScope, handle: String) -> Self {
-        Self { scope, opaque_handle: handle }
+        Self {
+            scope,
+            opaque_handle: handle,
+        }
     }
 
     #[cfg(test)]
@@ -48,8 +57,12 @@ impl CredentialLease {
         Self::new_scoped(scope, handle.to_owned())
     }
 
-    pub fn scope(&self) -> &CredentialScope { &self.scope }
-    pub fn opaque_handle(&self) -> &str { &self.opaque_handle }
+    pub fn scope(&self) -> &CredentialScope {
+        &self.scope
+    }
+    pub fn opaque_handle(&self) -> &str {
+        &self.opaque_handle
+    }
 }
 
 impl fmt::Debug for CredentialLease {
@@ -121,9 +134,21 @@ impl LocalSshKeyBroker {
         let mut keys = BTreeMap::new();
         ensure!(mapping.identities.len() <= 128, "too many SSH identities");
         for entry in mapping.identities {
-            ensure!(!entry.target.is_empty() && entry.target.len() <= 128, "invalid identity target");
-            ensure!(entry.target.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b,b'-'|b'_'|b'.')), "invalid identity target");
-            ensure!(entry.identity_file.is_absolute(), "identity file must use an absolute path");
+            ensure!(
+                !entry.target.is_empty() && entry.target.len() <= 128,
+                "invalid identity target"
+            );
+            ensure!(
+                entry
+                    .target
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.')),
+                "invalid identity target"
+            );
+            ensure!(
+                entry.identity_file.is_absolute(),
+                "identity file must use an absolute path"
+            );
             check_private_key_file(&entry.identity_file)
                 .context("invalid SSH identity file permissions")?;
             ensure!(
@@ -151,7 +176,8 @@ impl CredentialBroker for LocalSshKeyBroker {
             // path swap; such principals are outside this process trust model.
             check_private_key_file(path).map_err(|_| BrokerFailure::Unavailable)?;
             Ok(CredentialLease::new_scoped(
-                scope, path.to_string_lossy().to_string()
+                scope,
+                path.to_string_lossy().to_string(),
             ))
         })
     }
@@ -161,7 +187,9 @@ impl CredentialBroker for LocalSshKeyBroker {
 /// or world permissions. Additional parent-directory ACLs are the deployer's duty.
 pub fn check_private_key_file(path: &Path) -> std::io::Result<()> {
     if !path.is_absolute() {
-        return Err(std::io::Error::other("expected absolute private credential path"));
+        return Err(std::io::Error::other(
+            "expected absolute private credential path",
+        ));
     }
     let meta = std::fs::symlink_metadata(path)?;
     if !meta.file_type().is_file() || meta.len() > 64 * 1024 {
@@ -171,7 +199,9 @@ pub fn check_private_key_file(path: &Path) -> std::io::Result<()> {
     {
         use std::os::unix::fs::PermissionsExt;
         if meta.permissions().mode() & 0o077 != 0 {
-            return Err(std::io::Error::other("private credential file permissions too broad"));
+            return Err(std::io::Error::other(
+                "private credential file permissions too broad",
+            ));
         }
     }
     Ok(())

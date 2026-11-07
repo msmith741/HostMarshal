@@ -237,7 +237,8 @@ impl ExecutionCoordinator {
             || desc.effects != EffectClass::Observe
             || desc.supported_target_kind != "Host"
             || cap.input_schema != input_schema()
-            || cap.output_schema != crate::adapter::trusted_output_schema(desc.id).unwrap_or_default()
+            || cap.output_schema
+                != crate::adapter::trusted_output_schema(desc.id).unwrap_or_default()
             || cap.max_output_bytes == 0
             || cap.max_output_bytes > desc.max_output_bytes
         {
@@ -341,8 +342,9 @@ impl ExecutionCoordinator {
             }
             _ => return self.fail(&event, RuntimeFailure::Unavailable),
         };
-        if output != expected || serde_json::to_vec(&output)
-            .map_or(true, |encoded| encoded.len() > cap.max_output_bytes)
+        if output != expected
+            || serde_json::to_vec(&output)
+                .map_or(true, |encoded| encoded.len() > cap.max_output_bytes)
         {
             return self.fail(&event, RuntimeFailure::InvalidOutput);
         }
