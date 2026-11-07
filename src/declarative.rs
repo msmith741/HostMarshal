@@ -6,7 +6,9 @@ use std::{
     path::Path,
 };
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
+#[cfg(test)]
+use anyhow::bail;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -394,6 +396,7 @@ impl CompiledConfig {
             .collect()
     }
 
+    #[cfg(test)]
     pub fn invoke(&self, principal: &str, capability: &str, args: Value) -> Result<Value> {
         let Some(cap) = self.capabilities.get(capability) else {
             bail!("capability not found or not authorized");

@@ -4,9 +4,7 @@ use std::{env, path::Path, sync::Arc};
 
 use anyhow::{Result, bail};
 use hostmarshal::{
-    HostMarshal,
     audit::{AuditSink, JsonlFileAudit, StderrAudit},
-    config::Config,
     credentials::DenyCredentialBroker,
     declarative::CompiledConfig,
     dynamic_mcp::DeclarativeMcp,
@@ -67,21 +65,13 @@ async fn main() -> Result<()> {
         {
             serve_declarative(directory, principal, Some(audit_path)).await
         }
-        [flag, path] if flag == "--config" => {
-            // Legacy pre-alpha JSON mode retained temporarily for migration.
-            // Legacy mode does not have M2 execution/audit guarantees.
-            let config = Config::load(Path::new(path))?;
-            let server = HostMarshal::new(config).serve(stdio()).await?;
-            server.waiting().await?;
-            Ok(())
-        }
         _ => bail!(
             "usage: hostmarshal config validate <directory> | \
              hostmarshal config inspect <directory> | \
              hostmarshal config schema | \
              hostmarshal --config-dir <directory> --principal <trusted-launcher-subject> \
              [--audit-log <protected-file-path>] | \
-             hostmarshal --config <legacy-config.json>"
+             Use YAML resources; legacy --config JSON mode has been retired"
         ),
     }
 }
