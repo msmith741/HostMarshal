@@ -1,0 +1,33 @@
+# DESIGN FIXTURE ONLY: operationRef must match a preinstalled trusted descriptor.
+apiVersion: hostmarshal.io/v1alpha1
+kind: Capability
+metadata:
+  name: inventory.inspect
+spec:
+  operationRef: builtin.inventory.inspect/v1
+  targetKind: Host
+  exposure:
+    mcp: true
+  inputSchema:
+    type: object
+    properties:
+      target:
+        type: string
+        description: Stable inventory ID of the host to inspect
+    required:
+      - target
+    additionalProperties: false
+  outputSchema:
+    type: object
+    properties:
+      id:
+        type: string
+      hostname:
+        type: string
+    required:
+      - id
+      - hostname
+    additionalProperties: false
+  limits:
+    timeout: 2s
+    maxOutputBytes: 4096

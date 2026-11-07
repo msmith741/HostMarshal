@@ -1,0 +1,10 @@
+# DESIGN FIXTURE ONLY: no v1alpha1 parser exists yet.
+apiVersion: hostmarshal.io/v1alpha1
+kind: Host
+metadata:
+  name: sample-linux
+  labels:
+    environment: staging
+    os.family: linux
+spec:
+  address: sample-linux.example.invalid

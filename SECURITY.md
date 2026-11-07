@@ -1,9 +1,19 @@
 # Security policy
 
-HostMarshal is **pre-alpha** and must not be considered production-ready. No live infrastructure adapters are available in v0.1.
+**Status:** no supported production release. Design documents and examples are not security guarantees. The merged bootstrap code is a proof of concept and lacks live authentication, credential brokerage, and audit persistence.
 
-To report a vulnerability, use GitHub's private vulnerability reporting for this repository if enabled. Otherwise, contact the maintainer through a private channel before sharing sensitive details. **Do not file a public issue containing an exploit or credentials.**
+## Reporting vulnerabilities
 
-Reports should include affected revision, reproducible steps, security impact and suggested mitigations where possible. Do not test against hosts or accounts you do not own or administer.
+Use GitHub's **private vulnerability reporting** for this repository if it is enabled. Otherwise contact the maintainer privately through a suitable existing channel. Do **not** publish exploits, sensitive endpoints, credentials, or reproductions involving other people's infrastructure in public issues.
 
-Security-sensitive pull requests require negative-path tests and an updated threat model. Releases and a supported-version policy will be established before production use.
+A useful report includes the affected revision, reproducible steps against a disposable target, actual versus expected result, impact, and any known mitigations. We cannot guarantee a disclosure SLA until a formal maintenance and response policy is adopted.
+
+## Assumptions and safe use
+
+- Treat configuration directories, plugins, executable files, trust roots, and policy grants as privileged deployment material.
+- MCP clients are untrusted unless the **transport authenticates** them; client-supplied names are never evidence of identity.
+- No adapter may be considered safe merely because its capability is labeled `observe` or uses HTTP GET.
+- No arbitrary shell, target URL, command, or secret is a valid client-supplied execution primitive in the initial design.
+- Do not test privileged operations on systems you do not administer.
+
+See [Security Architecture](docs/SECURITY_ARCHITECTURE.md) and [Testing](docs/TEST_STRATEGY.md) for proposed controls and release gates.

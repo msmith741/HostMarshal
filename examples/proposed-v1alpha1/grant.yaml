@@ -1,0 +1,15 @@
+# DESIGN FIXTURE ONLY: authenticated subject identity comes from the launcher/auth layer.
+apiVersion: hostmarshal.io/v1alpha1
+kind: Grant
+metadata:
+  name: example-inventory-reader
+spec:
+  subjects:
+    - issuer: local://trusted-launcher
+      subject: example-operator
+  capabilities:
+    - inventory.inspect
+  targets:
+    kind: Host
+    names:
+      - sample-linux

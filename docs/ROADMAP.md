@@ -1,36 +1,74 @@
-# Roadmap
+# Development roadmap
 
-## v0.1 — Foundation (this PR)
+**Status:** proposed; milestone criteria define completeness, not an implementation claim. No time estimates or release dates are committed.
 
-- [x] Independent Rust crate and official MCP stdio server
-- [x] Typed, read-only inventory tools
-- [x] Default-deny exact principal/capability/host policy
-- [x] Configuration validation and unit tests
-- [x] CI: formatting, Clippy, tests
-- [x] Architecture and initial threat model
-- [ ] Verified builds, test results and a checked-in Cargo.lock
-- [ ] MCP client interoperability smoke test
+## M0 — Architecture baseline (documentation-only)
 
-## v0.2 — Authenticated observation
+**Deliverables:** product scope, threat model, layered design, ADRs, YAML resource contract, capability and adapter model, coding/test standards, roadmap, minimal illustrative examples.
 
-- [ ] Trusted identity binding rather than launcher-asserted identity
-- [ ] Formal typed adapter trait and strict time/output budgets
-- [ ] Restricted Linux SSH observation adapter with host-key pinning
-- [ ] Immutable operation registry and policy matrix
-- [ ] Durable audit sink, redaction and correlation IDs
+**Exit:** contracts are coherent and reviewed; every important security privilege boundary has an owner. Existing prototype gaps are explicitly recorded. **This documentation PR targets M0.**
 
-## v0.3 — Credential broker and Proxmox
+## M1 — Declarative core and mock integration
 
-- [ ] Vault-backed credential leasing and renewal/revocation
-- [ ] Proxmox adapter with least-privilege scoped API tokens
-- [ ] TLS trust validation, retry policy and quota limits
-- [ ] Integration test environments, negative-path security tests
+- Strict `v1alpha1` YAML parsing, version validation, duplicate-key checks, reference resolution, immutable registry snapshot.
+- Stable domain model, inventory and policy types; exact-target default-deny.
+- Dynamic MCP tool registration and typed schemas; offline CLI config validation and inspection.
+- Small built-in mock/inventory operation catalog, **not** general shell execution.
+- Refactor the merged hard-coded bootstrap implementation against these contracts; add checked-in `Cargo.lock`.
 
-## v0.4+ — Operations platform
+**Gate:** adding a YAML-only capability over an existing vetted mock operation needs no Rust change; authorized calls succeed and denied calls never reach the adapter; malformed or privilege-escalating manifests fail load. Test at least one legacy and the current supported MCP version.
 
-- [ ] Containerized deployment on Kubernetes with workload identity
-- [ ] Optional authenticated network MCP transport
-- [ ] Inventory reconciliation and operator-approved changes
-- [ ] Multi-client support, metrics and audit dashboards
+## M2 — Security-enforcing execution runtime
 
-**Design rule:** read-only operations first. Any future mutation requires a separate authorization and approval model.
+- Immutable operation descriptors; verified caller context; one invocation pipeline.
+- Typed adapter trait, target binding, limits, cancellation and structured error contracts.
+- Audit sink contract, redaction, correlation IDs, denied/error audit paths and failure policy.
+- Credential broker *interface* with mock secrets; scoped handles and no response leakage.
+- Policy-explain CLI and formal adversarial test suite.
+
+**Gate:** mock adapters cannot escape authorization, substitute endpoints/credentials, or modify intrinsic operation risk; audit and failure-mode tests pass.
+
+## M3 — Real observation adapters
+
+- Restricted Linux observation operations and secure SSH transport with pinned host identity.
+- Constrained HTTP API observation with approved endpoints, TLS, method/redirect/response restrictions.
+- Integration suites using disposable VMs/containers and mock API services.
+
+**Gate:** no unrestricted command tool; no credentials in output; denial, target-swap, SSRF and timeout tests pass; real read-only targets can be inspected with least privilege.
+
+## M4 — Credential providers and remote transports
+
+- Optional secret providers and leasing semantics; integration with one example provider.
+- Authenticated MCP Streamable HTTP, authorization-server and audience validation, network hardening.
+- Additional provider-neutral reference adapters (e.g., a hypervisor API) only after M2/M3 controls.
+
+**Gate:** multiple identities, policy scopes and secret backends can be configured without source code changes or assumptions about infrastructure.
+
+## M5 — External extension ecosystem
+
+- Versioned adapter SDK and process-isolated plugin protocol.
+- Plugin installation/trust/permission declarations; sandbox and failure isolation.
+- Optional restricted recipe language after separate threat-model review.
+- Schema compatibility and conformance fixtures for third-party authors.
+
+**Gate:** a developer ships a new protocol adapter independently; an administrator can install/approve it; unauthorized invocation or undeclared effects remain blocked.
+
+## M6 — Public beta and stabilization
+
+- Release artifacts for supported platforms; signed provenance, SBOM, dependency audits.
+- Migration guidance, user and plugin documentation, configuration-schema stability.
+- Verified public CI, end-to-end integration/security suites, operational runbooks.
+
+**Gate:** outside contributors can install, extend, troubleshoot and upgrade using only public documentation, with independent security review of execution paths.
+
+## Out of scope until independently designed
+
+Writes, restarts, high-privilege changes, destructive actions, interactive shells, unattended remediation, and approvals/delegation. These require separate risk models, authorization, approvals bound to exact requests, and additional release gates.
+
+## Dependency chain
+
+M0 → M1 → M2 → M3. M4 depends on M2 and transport security readiness. M5 depends on M2 and sandbox design. M6 requires evidence from every supported interface and adapter.
+
+## Release and change policy
+
+These are **milestones**, not promised semantic versions. No stable 1.0 API or production-support claim is established. All public interfaces get explicit versioning and deprecation rules before release. See [development workflow](DEVELOPMENT_WORKFLOW.md) and [ADRs](adr/README.md).
