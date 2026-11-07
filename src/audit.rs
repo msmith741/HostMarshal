@@ -34,31 +34,32 @@ pub struct AuditEvent {
     pub reason: String,
 }
 
+#[derive(Clone, Copy)]
+pub struct AuditContext<'a> {
+    pub request_id: &'a str,
+    pub issuer: &'a str,
+    pub subject: &'a str,
+    pub capability: &'a str,
+    pub operation: &'a str,
+    pub target: &'a str,
+    pub snapshot_digest: &'a str,
+}
+
 impl AuditEvent {
-    pub fn new(
-        request_id: &str,
-        issuer: &str,
-        subject: &str,
-        capability: &str,
-        operation: &str,
-        target: &str,
-        snapshot_digest: &str,
-        phase: AuditPhase,
-        reason: &str,
-    ) -> Self {
+    pub fn new(context: AuditContext<'_>, phase: AuditPhase, reason: &str) -> Self {
         let timestamp_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis();
         Self {
             timestamp_ms,
-            request_id: request_id.to_owned(),
-            issuer: issuer.to_owned(),
-            subject: subject.to_owned(),
-            capability: capability.to_owned(),
-            operation: operation.to_owned(),
-            target: target.to_owned(),
-            snapshot_digest: snapshot_digest.to_owned(),
+            request_id: context.request_id.to_owned(),
+            issuer: context.issuer.to_owned(),
+            subject: context.subject.to_owned(),
+            capability: context.capability.to_owned(),
+            operation: context.operation.to_owned(),
+            target: context.target.to_owned(),
+            snapshot_digest: context.snapshot_digest.to_owned(),
             phase,
             reason: reason.to_owned(),
         }
@@ -142,13 +143,15 @@ mod tests {
     #[test]
     fn events_do_not_encode_payloads_or_tokens() {
         let event = AuditEvent::new(
-            "request-1",
-            "local://trusted-launcher",
-            "operator",
-            "inventory.inspect",
-            "builtin.inventory.inspect/v1",
-            "sample-linux",
-            "sha256:abc",
+            AuditContext {
+                request_id: "request-1",
+                issuer: "local://trusted-launcher",
+                subject: "operator",
+                capability: "inventory.inspect",
+                operation: "builtin.inventory.inspect/v1",
+                target: "sample-linux",
+                snapshot_digest: "sha256:abc",
+            },
             AuditPhase::Denied,
             "unauthorized",
         );

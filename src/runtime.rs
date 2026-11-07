@@ -16,7 +16,7 @@ use crate::{
         AdapterInvocation, CredentialRequirement, EffectClass, ResolvedTarget,
         TrustedAdapterCatalog,
     },
-    audit::{AuditEvent, AuditPhase, AuditSink},
+    audit::{AuditContext, AuditEvent, AuditPhase, AuditSink},
     authorization::{AuthorizationRequest, Authorizer, GrantAuthorizer},
     credentials::{CredentialBroker, CredentialScope},
     declarative::{input_schema, output_schema},
@@ -155,55 +155,37 @@ impl ExecutionCoordinator {
             "<unresolved>"
         };
         let operation_for_log = "<unresolved>";
+        let deny = |operation: &str, target: &str, failure| {
+            self.denied(
+                AuditContext {
+                    request_id: &request_id,
+                    issuer: caller.issuer(),
+                    subject: caller.subject(),
+                    capability: log_capability,
+                    operation,
+                    target,
+                    snapshot_digest: &digest,
+                },
+                failure,
+            )
+        };
 
         let Some(snapshot) = snapshot else {
-            self.denied(
-                caller,
-                &request_id,
-                log_capability,
-                operation_for_log,
-                target_for_log,
-                &digest,
-                RuntimeFailure::Unauthorized,
-            )?;
+            deny(operation_for_log, target_for_log, RuntimeFailure::Unauthorized)?;
             return Err(RuntimeFailure::Unauthorized);
         };
         let Some(cap) = snapshot.capabilities.get(capability) else {
-            self.denied(
-                caller,
-                &request_id,
-                log_capability,
-                operation_for_log,
-                target_for_log,
-                &digest,
-                RuntimeFailure::Unauthorized,
-            )?;
+            deny(operation_for_log, target_for_log, RuntimeFailure::Unauthorized)?;
             return Err(RuntimeFailure::Unauthorized);
         };
         let Some(target) = target_input else {
-            self.denied(
-                caller,
-                &request_id,
-                log_capability,
-                &cap.operation_ref,
-                target_for_log,
-                &digest,
-                RuntimeFailure::InvalidInput,
-            )?;
+            deny(&cap.operation_ref, target_for_log, RuntimeFailure::InvalidInput)?;
             return Err(RuntimeFailure::InvalidInput);
         };
         let target = target.to_owned();
         let valid_input = input.as_object().is_some_and(|obj| obj.len() == 1);
         if !valid_input || target.is_empty() || target.len() > 128 {
-            self.denied(
-                caller,
-                &request_id,
-                log_capability,
-                &cap.operation_ref,
-                target_for_log,
-                &digest,
-                RuntimeFailure::InvalidInput,
-            )?;
+            deny(&cap.operation_ref, target_for_log, RuntimeFailure::InvalidInput)?;
             return Err(RuntimeFailure::InvalidInput);
         }
         if !self
@@ -217,30 +199,14 @@ impl ExecutionCoordinator {
             })
             .permitted()
         {
-            self.denied(
-                caller,
-                &request_id,
-                log_capability,
-                &cap.operation_ref,
-                target_for_log,
-                &digest,
-                RuntimeFailure::Unauthorized,
-            )?;
+            deny(&cap.operation_ref, target_for_log, RuntimeFailure::Unauthorized)?;
             return Err(RuntimeFailure::Unauthorized);
         }
 
         // Trust-boundary checks are repeated in the coordinator; a manifest is
         // never permitted to redefine risk, targets, schemas or maximum limits.
         let Some(adapter) = self.adapters.resolve(&cap.operation_ref) else {
-            self.denied(
-                caller,
-                &request_id,
-                log_capability,
-                &cap.operation_ref,
-                &target,
-                &digest,
-                RuntimeFailure::Unavailable,
-            )?;
+            deny(&cap.operation_ref, &target, RuntimeFailure::Unavailable)?;
             return Err(RuntimeFailure::Unavailable);
         };
         let desc = adapter.descriptor();
@@ -252,59 +218,32 @@ impl ExecutionCoordinator {
             || cap.max_output_bytes == 0
             || cap.max_output_bytes > desc.max_output_bytes
         {
-            self.denied(
-                caller,
-                &request_id,
-                log_capability,
-                &cap.operation_ref,
-                &target,
-                &digest,
-                RuntimeFailure::Unavailable,
-            )?;
+            deny(&cap.operation_ref, &target, RuntimeFailure::Unavailable)?;
             return Err(RuntimeFailure::Unavailable);
         }
         let Some(host) = snapshot.hosts.get(&target) else {
-            self.denied(
-                caller,
-                &request_id,
-                log_capability,
-                &cap.operation_ref,
-                target_for_log,
-                &digest,
-                RuntimeFailure::Unauthorized,
-            )?;
+            deny(&cap.operation_ref, target_for_log, RuntimeFailure::Unauthorized)?;
             return Err(RuntimeFailure::Unauthorized);
         };
 
         let permit = match self.capacity.try_acquire() {
             Ok(permit) => permit,
             Err(_) => {
-                self.denied(
-                    caller,
-                    &request_id,
-                    log_capability,
-                    desc.id,
-                    &target,
-                    &digest,
-                    RuntimeFailure::Busy,
-                )?;
+                deny(desc.id, &target, RuntimeFailure::Busy)?;
                 return Err(RuntimeFailure::Busy);
             }
         };
 
-        let event = |phase, reason: &str| {
-            AuditEvent::new(
-                &request_id,
-                caller.issuer(),
-                caller.subject(),
-                capability,
-                desc.id,
-                &target,
-                &digest,
-                phase,
-                reason,
-            )
+        let event_context = AuditContext {
+            request_id: &request_id,
+            issuer: caller.issuer(),
+            subject: caller.subject(),
+            capability,
+            operation: desc.id,
+            target: &target,
+            snapshot_digest: &digest,
         };
+        let event = |phase, reason: &str| AuditEvent::new(event_context, phase, reason);
 
         // This is a mandatory *pre-execution* commitment even for observation.
         // A missing/broken audit sink blocks the broker and adapter.
@@ -358,23 +297,12 @@ impl ExecutionCoordinator {
 
     fn denied(
         &self,
-        caller: &AuthenticatedCaller,
-        request_id: &str,
-        capability: &str,
-        operation: &str,
-        target: &str,
-        digest: &str,
+        context: AuditContext<'_>,
         failure: RuntimeFailure,
     ) -> Result<(), RuntimeFailure> {
         self.audit
             .record(&AuditEvent::new(
-                request_id,
-                caller.issuer(),
-                caller.subject(),
-                capability,
-                operation,
-                target,
-                digest,
+                context,
                 AuditPhase::Denied,
                 failure.reason_code(),
             ))
