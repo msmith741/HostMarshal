@@ -1,0 +1,14 @@
+apiVersion: hostmarshal.io/v1alpha1
+kind: Grant
+metadata:
+  name: remote-observer-example
+spec:
+  subjects:
+    - issuer: https://identity.example.invalid
+      subject: example-operator
+  capabilities:
+    - inventory.inspect
+  targets:
+    kind: Host
+    names:
+      - sample-linux

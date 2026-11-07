@@ -1,0 +1,16 @@
+{
+  "apiVersion": "hostmarshal.io/vault-ssh/v1alpha1",
+  "vaultUrl": "https://vault.example.invalid:8200",
+  "sshMount": "ssh",
+  "tokenFile": "/run/hostmarshal/vault-token",
+  "caCertificateFile": "/etc/hostmarshal/trust/vault-ca.pem",
+  "identities": [
+    {
+      "target": "demo-linux",
+      "identityFile": "/var/lib/hostmarshal/keys/demo-linux",
+      "publicKeyFile": "/var/lib/hostmarshal/keys/demo-linux.pub",
+      "role": "observe-only",
+      "principal": "observer"
+    }
+  ]
+}
