@@ -689,6 +689,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn exhausted_capacity_fails_closed_and_is_audited() {
+        let adapter = Arc::new(TestAdapter::new("ok", &OBSERVE_DESCRIPTOR));
+        let broker = Arc::new(BrokerSpy::new("correct"));
+        let audit = Arc::new(MemoryAudit::new(None));
+        let runtime = coordinator(adapter.clone(), broker.clone(), audit.clone());
+        let _occupancy = runtime.capacity.try_acquire_many(16).unwrap();
+        assert_eq!(
+            runtime
+                .invoke(&caller("example-operator"), "inventory.inspect",
+                    json!({"target": "sample-linux"}))
+                .await
+                .unwrap_err(),
+            RuntimeFailure::Busy
+        );
+        assert_eq!(adapter.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(broker.count.load(Ordering::SeqCst), 0);
+        assert_eq!(audit.phases(), vec![AuditPhase::Denied]);
+    }
+
+    #[tokio::test]
+    async fn lockdown_denies_all_new_execution_before_adapter() {
+        let adapter = Arc::new(TestAdapter::new("ok", &OBSERVE_DESCRIPTOR));
+        let broker = Arc::new(BrokerSpy::new("correct"));
+        let audit = Arc::new(MemoryAudit::new(None));
+        let runtime = coordinator(adapter.clone(), broker.clone(), audit.clone());
+        runtime.store.lockdown().unwrap();
+        assert_eq!(
+            runtime
+                .invoke(&caller("example-operator"), "inventory.inspect",
+                    json!({"target": "sample-linux"}))
+                .await
+                .unwrap_err(),
+            RuntimeFailure::Unauthorized
+        );
+        assert_eq!(adapter.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(broker.count.load(Ordering::SeqCst), 0);
+        assert_eq!(audit.phases(), vec![AuditPhase::Denied]);
+    }
+
+    #[tokio::test]
     async fn terminal_audit_failure_never_returns_output() {
         let adapter = Arc::new(TestAdapter::new("ok", &OBSERVE_DESCRIPTOR));
         let broker = Arc::new(BrokerSpy::new("error"));
