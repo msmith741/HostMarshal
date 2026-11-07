@@ -6,7 +6,7 @@ use rmcp::{
     ErrorData as McpError, ServerHandler,
     model::{
         CacheScope, CallToolRequestParams, CallToolResponse, CallToolResult, ListToolsResult,
-        PaginatedRequestParams, ServerCapabilities, ServerInfo, Tool,
+        PaginatedRequestParams, ServerCapabilities, ServerConfig, Tool,
     },
     service::{RequestContext, RoleServer},
 };
@@ -50,8 +50,8 @@ impl DeclarativeMcp {
 }
 
 impl ServerHandler for DeclarativeMcp {
-    fn get_info(&self) -> ServerInfo {
-        let mut info = ServerInfo::default();
+    fn get_info(&self) -> ServerConfig {
+        let mut info = ServerConfig::default();
         info.capabilities = ServerCapabilities::builder().enable_tools().build();
         info
     }
