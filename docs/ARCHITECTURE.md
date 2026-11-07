@@ -1,11 +1,11 @@
 # Proposed architecture
 
-**Status:** accepted ADR-0003–0008 and ADR-0011 design principles; M3 adds two audited, bounded real observation adapters. Arbitrary remote execution, writes, remote MCP authentication and external plugins remain unavailable. **Design goal:** transport independence, declarative capabilities, and security boundaries that apply to every adapter.
+**Status:** accepted ADR-0003–0008 and ADR-0011 design principles; M3 adds two audited, bounded real observation adapters. M4 adds authenticated stateless MCP HTTP and scoped Vault SSH signing; arbitrary remote execution, writes, native public TLS and external plugins remain unavailable. **Design goal:** transport independence, declarative capabilities, and security boundaries that apply to every adapter.
 
 ## Logical diagram
 
 ~~~text
-MCP stdio / future authenticated MCP HTTP / native CLI
+MCP stdio / authenticated stateless MCP HTTP (M4) / offline CLI
                            |
                  Transport + identity binding
                            |
@@ -93,9 +93,9 @@ See [Capabilities](CAPABILITIES.md), [Adapters](ADAPTERS.md), [Configuration](CO
 ## Deployment profiles
 
 - **Local:** single binary, stdio, local trusted process launcher, static/packaged inventory, explicit grants.
-- **Remote (later):** authenticated MCP HTTP, listener hardening, workload identity, strict egress, secret provider, durable audit.
+- **Remote (M4 subset):** verified short-lived JWT access tokens on stateless MCP HTTP behind a colocated HTTPS proxy, optional target-specific Vault SSH certificate issuance. Full workload identity, token introspection/revocation, egress, distributed auth and durable remote audit remain later work.
 - **Containers (later):** optional distribution only; do not require Kubernetes or service meshes.
 
 ## Current bootstrap comparison
 
-Merged [PR #1](https://github.com/msmith741/HostMarshal/pull/1) was an early Rust MCP bootstrap. Its hard-coded tools and JSON mode were retired during M2, leaving only the validated declarative invocation path. External authentication, live adapters and plugin isolation remain separate future requirements.
+Merged [PR #1](https://github.com/msmith741/HostMarshal/pull/1) was an early Rust MCP bootstrap. Its hard-coded tools and JSON mode were retired during M2, leaving only the validated declarative invocation path. The M4 remote OAuth resource-server subset and a Vault SSH signing broker exist; external authorization-server setup, full credential lifecycle, egress enforcement and plugin isolation remain separate future requirements.

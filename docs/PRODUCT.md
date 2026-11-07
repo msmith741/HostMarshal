@@ -35,6 +35,9 @@ HostMarshal provides **typed, authorized, auditable infrastructure operations** 
 | FR-015 | Lock application dependencies and exercise parser fuzzing and supported MCP eras | M1 |
 | FR-016 | Enforce pinned SSH host identity, dedicated target-scoped key access, fixed Linux observation and bounded output | M3 |
 | FR-017 | Enforce approved HTTPS-only health probes, validated TLS identity, no redirects/proxies or untrusted response-body exposure | M3 |
+| FR-018 | Authenticate every remote MCP request with signed, audience-bound, short-lived external JWT access tokens and reject client identity spoofing | M4 |
+| FR-019 | Provide stateless OAuth-protected MCP Streamable HTTP and RFC9728 discovery behind a mandatory colocated HTTPS proxy | M4 |
+| FR-020 | Broker a scoped short-lived Vault SSH certificate for a trusted target and approved fixed operation, never exposing signing tokens or private keys | M4 |
 
 ## Non-functional requirements
 

@@ -1,11 +1,11 @@
 # M2 — Security-enforcing execution runtime
 
-**Status:** M2 central runtime implemented, now used by the M3 built-in SSH/HTTPS observations as well as static inventory. This is an architectural security foundation, not authorization to execute infrastructure-changing commands.
+**Status:** M2 central runtime implemented, used by M3 trusted observations and M4 authenticated HTTP and scoped Vault SSH credentials. This is an architectural security foundation, not authorization to execute infrastructure-changing commands.
 
 ## Architecture and trust boundary
 
 ```text
-trusted OS launcher -> AuthenticatedCaller
+trusted OS launcher OR verified HTTP JWT -> AuthenticatedCaller
 MCP call -> ExecutionCoordinator
   -> immutable ConfigStore snapshot
   -> validate capability and arguments
@@ -61,6 +61,6 @@ Rust tests cover authorized success, denied caller/target/tool/arguments, emerge
 
 ## Deliberate limitations
 
-M3 provides two fixed **live read-only** transports: Linux uname over pinned-key SSH and TLS-validated HTTPS health. The default `DenyCredentialBroker` still denies all SSH requests unless the trusted local launcher loads a protected per-target `LocalSshKeyBroker` mapping. No remote/renewable secret backend is implemented. The project does **not** yet implement remote identity federation, plugin process sandboxing, approval workflows, reauthorization at side-effect boundaries, durable remote audit, tamper evidence, or multiple independent tenants. The local launcher and protected configuration directory remain deployment trust assumptions. Do not advertise this M2 runtime as a production remote-admin gateway.
+M3 provides two fixed **live read-only** transports: Linux uname over pinned-key SSH and TLS-validated HTTPS health. The default `DenyCredentialBroker` still denies all SSH requests unless the trusted local launcher loads a protected per-target `LocalSshKeyBroker` mapping. M4 adds an optional restricted Vault SSH signing backend with one-minute certificates, but not general renewable secret management. The M4 HTTP subset verifies signed remote access JWTs through a required colocated TLS proxy. The project does **not** provide a full OAuth authorization server, opaque-token introspection, online token revocation, process-isolated plugins, approval workflows, mutable-operation reauthorization, durable remote audit or tamper evidence. The local launcher and protected configuration directory remain deployment trust assumptions. Do not advertise this M2 runtime as a production remote-admin gateway.
 
 See [Audit](AUDIT.md), [Security](SECURITY_ARCHITECTURE.md), [Adapters](ADAPTERS.md), and [Traceability](TRACEABILITY.md).

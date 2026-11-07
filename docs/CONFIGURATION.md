@@ -80,6 +80,8 @@ hostmarshal capabilities list
 hostmarshal policy explain --subject example-operator --capability inventory.inspect --target sample-linux
 ~~~
 
+M4 remote Grants accept verified HTTPS issuer+subject identities; signed JWT verification and audience checking live in the HTTP transport, not YAML. The JWKS file and the `--vault-ssh-config` signing-role map are privileged launcher configuration, not Capability or Grant resources. See [M4 remote](REMOTE_MCP_HTTP.md) and [Vault](VAULT_SSH.md).
+
 M3 `Host.spec.ssh` accepts only `user`, `port` and absolute `knownHostsFile`; `Host.spec.https` accepts `port` and optional absolute `caCertificateFile`. The Host address must be a valid DNS name or IP address when these transports are used; no scheme, path or URL is allowed. The M3 runtime uses fixed SSH command and HTTPS /health path, never tool-provided URLs or commands. The protected SSH key mapping is a **separate launcher-supplied JSON file**, never a capability or grant YAML field. See [M3 observation operations](OBSERVATION_ADAPTERS.md).
 
 The schema export is derived from the Rust resource types and is structural. Semantic validation of trusted operation IDs, cross-references, schema equality, and authorization still happens in trusted code. The SHA-256 digest is computed over the normalized **effective** snapshot and is not a signature or proof of source/binary integrity. The parser rejects anchors, aliases, merges and custom tags and applies explicit resource budgets. TOCTOU file-replacement risks remain for later secure deployment hardening.

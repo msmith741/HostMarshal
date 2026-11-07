@@ -1,6 +1,6 @@
 # Architecture decision records
 
-**Status:** ADR-0003–0008 and ADR-0011 are Accepted with explicit scope/security clarifications. ADR-0001, 0002, 0009 and 0010 remain Proposed. Acceptance is a design decision, not proof that future controls are implemented.
+**Status:** ADR-0003–0008 and ADR-0011–0013 are Accepted with explicit scope/security clarifications. ADR-0001, 0002, 0009 and 0010 remain Proposed. Acceptance is a design decision, not proof that future controls are implemented.
 
 | ID | Title | Status |
 | --- | --- | --- |
@@ -15,6 +15,8 @@
 | [0009](0009-mcp-is-a-protocol-adapter.md) | MCP as a protocol adapter | Proposed |
 | [0010](0010-versioning-and-compatibility.md) | Versioning and compatibility | Proposed |
 | [0011](0011-readonly-network-observation.md) | Restricted read-only SSH/HTTPS network observation | Accepted |
+| [0012](0012-oauth-protected-stateless-mcp-http.md) | OAuth-protected stateless remote MCP resource server | Accepted |
+| [0013](0013-vault-ssh-certificate-broker.md) | Scoped Vault SSH certificate issuance | Accepted |
 
 ## How to use ADRs
 

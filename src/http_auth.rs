@@ -6,7 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, ensure};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header};
 use serde::Deserialize;
 use url::Url;

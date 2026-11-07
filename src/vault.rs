@@ -224,7 +224,7 @@ impl VaultSshCertBroker {
             .prefix("hostmarshal-ssh-cert-")
             .tempfile()
             .map_err(|_| BrokerFailure::Unavailable)?;
-        write!(file, "{kind} {encoded}\n").map_err(|_| BrokerFailure::Unavailable)?;
+        writeln!(file, "{kind} {encoded}").map_err(|_| BrokerFailure::Unavailable)?;
         file.flush().map_err(|_| BrokerFailure::Unavailable)?;
         Ok(CredentialLease::with_signed_certificate(
             scope,

@@ -70,6 +70,12 @@ A green bounded fuzz run is useful regression evidence but **not** exhaustive se
 
 Unit tests enforce network-hostname validation, typed operation allowlist and grant/transport matching. The schema conformance suite verifies regenerated M3 transport structure and rejects executable configuration fields.
 
+## M4 authenticated HTTP and Vault certificate regression
+
+- `tests/http_auth_smoke.py`: disposable JWT RSA issuer keys, protected-resource metadata, 401 challenge, exact signature/issuer/audience/type/expiry/scope and short lifetime, per-request subject isolation, forged `clientInfo`, invalid Origin, query-token and public-binding denial.
+- `tests/vault_ssh_smoke.py`: disposable TLS Vault-compatible signer and CA; cert-only OpenSSH server, signed one-minute user certificate, protected per-target role mapping, malformed credential output, token rotation, wrong CA and audit redaction.
+- These confirm only the current signed-JWT resource-server and Vault SSH signing subsets; real issuer/OAuth flow setup, Vault service policy, external TLS termination and opaque-token introspection remain separate operational release gates.
+
 ## Release-blocking failures
 
 Block publication when authorization is bypassed; a policy-negative call reaches a live adapter; credentials leak; a client can substitute a target; an observe operation performs an unintended mutation; an audit-mandatory invocation executes without its required audit commitment; or a plugin escapes its granted isolation.

@@ -1,6 +1,6 @@
 # Security policy
 
-**Status:** no supported production release. Design documents and examples are not security guarantees. The M3 runtime supports audited inventory plus fixed SSH/HTTPS observations with a protected local key-path broker; it still has no remote client authentication, remote/short-lived credential provider, arbitrary command execution, mutation, or tamper-evident audit. The old unaudited JSON handlers were retired.
+**Status:** no supported production release. Design documents and examples are not security guarantees. The M4 runtime supports audited inventory plus fixed SSH/HTTPS observations, externally verified JWT access tokens on stateless HTTP and an optional short-lived Vault SSH certificate-signing provider. It still lacks an in-process OAuth authorization server, token introspection/revocation, native public TLS termination, independent audit integrity, arbitrary command execution, mutation and OS-isolated plugins. The old unaudited JSON handlers were retired.
 
 ## Reporting vulnerabilities
 

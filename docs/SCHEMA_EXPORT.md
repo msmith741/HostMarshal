@@ -1,6 +1,6 @@
 # Machine-readable HostMarshal configuration schema
 
-**Status:** Versioned, checked-in **v1alpha1** resource schema and independent schema-conformance CI are implemented. M3 adds optional typed SSH and HTTPS Host fields to this same versioned pre-alpha schema; CI prevents generator/artifact drift. This validates structural configuration, **not** authorization, identity, plugin safety, or the source of config.
+**Status:** Versioned, checked-in **v1alpha1** resource schema and independent schema-conformance CI are implemented. M3 adds typed SSH/HTTPS Host fields; M4 additionally validates HTTPS issuer strings **semantically** in Rust. JSON Schema captures resource shape, not trusted access-token signatures, issuer identity or live authorization. CI continues preventing generator/artifact drift. This validates structural configuration, **not** authorization, identity, plugin safety, or the source of config.
 
 ## Published artifact
 

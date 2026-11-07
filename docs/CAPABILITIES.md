@@ -41,7 +41,7 @@ The descriptor is supplied by a trusted built-in adapter or approved plugin pack
 - **Privileged:** administrative changes; elevated controls and auditing.
 - **Destructive:** high-impact state removal; strict additional approval and blast-radius checks.
 
-Only **Observe** on vetted inventory, fixed Linux uname and HTTPS health operations is supported. Treat unverified operations as higher risk rather than trusting manifest metadata.
+Only **Observe** on vetted inventory, fixed Linux uname and HTTPS health operations is supported. M4 changes authenticated transport and scoped SSH credential issuance only; it adds no arbitrary shell, HTTP or secret-reading operation. Treat unverified operations as higher risk rather than trusting manifest metadata.
 
 ## Initial interface and validation
 

@@ -6,7 +6,7 @@ use anyhow::{Result, ensure};
 use axum::{
     Json, Router,
     extract::State,
-    http::{HeaderMap, HeaderValue, Request, StatusCode, header},
+    http::{HeaderValue, Request, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get,

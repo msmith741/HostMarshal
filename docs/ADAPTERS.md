@@ -60,7 +60,7 @@ Choose a versioned, explicitly documented IPC schema (e.g. protobuf/JSON over a 
 
 ## Credential handling
 
-An adapter requests a specific credential purpose through the broker; it must never choose arbitrary secret paths or request unrelated tokens. Configure short-lived, scoped identities on the target system. Credential backends are optional: local protected files for development, Vault/cloud/native stores later. No provider-specific type belongs in core domain models.
+An adapter requests a specific credential purpose through the broker; it must never choose arbitrary secret paths or request unrelated tokens. Configure short-lived, scoped identities on the target system. Credential backends are optional: M3 local protected key paths or M4 target-scoped Vault SSH CA signing; other cloud/native providers require separate implementations. No provider-specific type belongs in core domain models.
 
 ## Testing obligations
 

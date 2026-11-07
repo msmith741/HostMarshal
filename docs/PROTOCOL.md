@@ -1,6 +1,6 @@
 # Client protocols and identity
 
-**Status:** stdio MCP protocol adapter is implemented for a limited static inventory capability. The broader authenticated HTTP and multi-client architecture remains proposed.
+**Status:** stdio and M4 authenticated stateless MCP Streamable HTTP are implemented for approved read-only observations. A full OAuth authorization server, distributed multi-client sessions and full remote production hardening remain outside this pre-alpha scope.
 
 ## MCP posture
 
@@ -16,7 +16,7 @@ Target the stable [MCP 2026-07-28 specification](https://modelcontextprotocol.io
 ## Transports
 
 - **stdio first:** fixed trusted launcher, process/OS identity binding, stdout reserved for protocol, stderr for redacted diagnostics. This is not cryptographic caller authentication.
-- **authenticated MCP HTTP later:** strict audience/issuer verification, TLS, origin/CSRF/DNS rebinding protections where applicable, network restrictions, timeouts and per-identity rates.
+- **authenticated MCP HTTP (M4):** strict pinned RSA JWT issuer/audience/signature/lifetime/scope verification, per-request identity and stateless protocol semantics, RFC9728 protected-resource metadata, enforced loopback binding. A colocated HTTPS proxy, rate limiting, egress controls and sender-constrained tokens remain external/future hardening requirements.
 - **CLI:** direct invocations share the same validated security context, registry and runtime; a policy-explanation command may not impersonate a runtime caller.
 
 ## Policy changes during a stdio connection
@@ -32,6 +32,6 @@ HostMarshal tests **two distinct protocol eras** over actual stdio sessions in C
 | `2025-11-25` legacy | `initialize` → `notifications/initialized` → `tools/list` and `tools/call` | `tests/mcp_smoke.py`, `tests/declarative_smoke.py` |
 | `2026-07-28` stateless | `server/discover` → request-scoped `_meta` with protocol version and client capabilities → `tools/list`, `tools/call` | `tests/mcp_modern_smoke.py` |
 
-Both paths verify authorization boundaries; the modern test also checks no-cache private tool-catalog hints and schema presence. A successful SDK build alone is **not** counted as protocol conformance. The tests do not validate HTTP transports, OAuth, subscriptions, MRTR, or the complete upstream MCP conformance suite; those remain explicit future work.
+Both paths verify authorization boundaries; the modern test also checks no-cache private tool-catalog hints and schema presence. A successful SDK build alone is **not** counted as protocol conformance. M4 independently tests JWT bearer-protected stateless Streamable HTTP through actual HTTP requests; the earlier tests cover stdio. Neither suite certifies a full OAuth authorization server, token introspection, all subscriptions/MRTR, or the complete upstream MCP conformance matrix.
 
-New transport implementations must reuse the same snapshot-aware policy and invocation coordinator, without accepting unverified caller metadata as identity.
+M4 HTTP uses the same immutable-snapshot policy and invocation coordinator as stdio. Each request's trusted middleware injects `AuthenticatedCaller` derived from a verified access token; no HTTP session or user-provided MCP metadata establishes authority. See [Remote MCP](REMOTE_MCP_HTTP.md) and [ADR-0012](adr/0012-oauth-protected-stateless-mcp-http.md).

@@ -1,6 +1,6 @@
 # Security architecture and threat model
 
-**Status:** security architecture covers M1/M2 enforcement and M3 vetted SSH/HTTPS observation controls, alongside **unimplemented** privileged/remote transport security requirements. Do not infer production assurance from this document. For disclosure see [SECURITY.md](../SECURITY.md).
+**Status:** M1–M3 enforcement plus M4 JWT access-token resource server and scoped Vault SSH signer are implemented as a pre-alpha subset; important public TLS and provider-hardening controls remain **unimplemented**. Do not infer production assurance from this document. For disclosure see [SECURITY.md](../SECURITY.md).
 
 ## Assets and adversaries
 
@@ -87,7 +87,7 @@ The declarative stdio MCP handler now delegates all tool invocations to `Executi
 
 For each invocation, the audit sink must accept `Authorized` *before* credential access/operation execution; failures deny execution. The sink records denied and terminal outcomes with correlation IDs, operation and snapshot digests. Default stderr and optional protected local JSONL/sync-data backends are available, but the latter is **not tamper-evident** and has OS file-replacement risks. Terminal audit failure can only suppress the response, not undo an effect, which is why no mutation is permitted. See [Audit](AUDIT.md).
 
-A `CredentialBroker` interface accepts exact operation/target/purpose scopes. Without an explicit protected local SSH identity mapping, the broker denies credential requests. M3's minimal local key-path broker allows only `builtin.linux.uname/v1` for mapped targets with purpose `ssh-observe`. Real external/short-lived secret provider integration remains M4. See [M3 security design](OBSERVATION_ADAPTERS.md). External plugins, remote authentication, approvals, cancellation guarantees for privileged work and real host adapters are explicitly absent.
+A `CredentialBroker` interface accepts exact operation/target/purpose scopes. Without an explicit protected local SSH identity mapping, the broker denies credential requests. M3's minimal local key-path broker allows only `builtin.linux.uname/v1` for mapped targets with purpose `ssh-observe`. M4 adds optional short-lived Vault SSH user-certificate signing for the fixed Linux uname adapter. See [M3 security design](OBSERVATION_ADAPTERS.md). External plugins, remote authentication, approvals, cancellation guarantees for privileged work and real host adapters are explicitly absent.
 
 ## Residual risks
 
@@ -96,3 +96,9 @@ Signatures prove origin, not safety. A compromised broker/OS or overly powerful 
 ## Release security gates
 
 No live target adapter until identity, authorization, target validation, time/output bounds, and auditable outcomes are demonstrated. No third-party plugin execution without independent isolation verification. No privileged mutation or production claims without audited policy, approvals, failure testing, and documented response procedures.
+
+## M4 additional trust boundaries
+
+External OAuth/OIDC servers issue short-lived access JWTs. `src/http_auth.rs` verifies a pinned JWKS signature, `at+jwt` token type, exact issuer and resource audience, timestamps, token lifetime and resource scope. `src/http_server.rs` binds only loopback and requires a colocated HTTPS TLS proxy; every Streamable HTTP request gets a separately verified caller. MCP `clientInfo` and forwarded proxy identity headers are not trusted. The `src/vault.rs` provider permits only approved per-target Vault SSH signing roles over TLS after default-deny authorization and audit, with owner-only temporary user certificates.
+
+**Not covered:** public TLS configuration, OAuth authorization-code/consent and issuer administration, online token revocation/introspection, sender-constrained tokens, automatic JWKS refresh, Vault Agent renewal, CA/role configuration and remote certificate revocation, same-user filesystem replacement races, per-identity ingress quotas and tamper-evident audit. See [remote MCP](REMOTE_MCP_HTTP.md), [Vault SSH](VAULT_SSH.md), [ADR-0012](adr/0012-oauth-protected-stateless-mcp-http.md) and [ADR-0013](adr/0013-vault-ssh-certificate-broker.md).

@@ -1,6 +1,6 @@
 # Audit events and operational guidance
 
-**Status:** M2 implements structured audit events for the declarative stdio execution runtime; M3 network observations use the same preexecution and terminal auditing, without returning raw network responses or private-key data. An audit event is evidence of what the process attempted and recorded; local files are **not** tamper-evident.
+**Status:** M2 structured audit covers M3 observations and M4 remote verified callers/Vault SSH certificate leases. Raw access tokens, Vault service tokens, key paths, signed certificates and network response bodies are not returned in execution audit records. An audit event is evidence of what the process attempted and recorded; local files are **not** tamper-evident.
 
 ## Event lifecycle
 
@@ -33,3 +33,7 @@ On Unix the file is created mode **0600**, existing group/world-readable files a
 ## Verification
 
 `tests/audit_smoke.py` checks the actual MCP wire + synchronized file, correlation between precommit/terminal records, denied calls, redaction, and file permissions. In-memory audit sink fault-injection tests enforce deny-on-precommit-failure and no-output-on-terminal-failure. Audit sink implementations should be subjected to additional fault injection before supporting any privileged operation.
+
+## M4 authentication edge
+
+HTTP requests rejected **before** MCP invocation (missing/invalid Bearer token, wrong Origin or token in URL) do **not** create tool-operation audit records; configure authentication failure access logs, rate limits and TLS security at the colocated proxy. Authenticated tool calls retain verified issuer, subject, correlation and terminal outcome records through M2. See [M4 HTTP](REMOTE_MCP_HTTP.md).

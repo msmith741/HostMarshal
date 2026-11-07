@@ -4,7 +4,7 @@
 
 HostMarshal is a vendor-neutral, pre-alpha Rust infrastructure capability gateway. It supports MCP over stdio, versioned YAML capabilities, and a centralized audited execution coordinator for vetted inventory, Linux SSH and HTTPS observations.
 
-> **Pre-alpha.** M3 adds fixed Linux `uname -s` over pinned-host-key SSH and a fixed HTTPS `/health` GET. There is **no** generic remote command, arbitrary URL, mutation, external plugin, remote MCP authentication, short-lived secret issuance or tamper-evident audit. Use a dedicated minimally privileged OS/SSH identity and trusted configuration.
+> **Pre-alpha.** M3 provides fixed Linux `uname -s` over pinned-host-key SSH and HTTPS `/health`. M4 adds authenticated stateless MCP HTTP behind a mandatory HTTPS proxy and optional Vault-signed short-lived SSH certificates. There is **no** generic remote command, arbitrary URL, mutation, untrusted plugin, built-in OAuth authorization server, complete Vault lifecycle or tamper-evident audit. Protect OS/SSH identities and trusted configuration.
 
 ## Declarative M1 configuration + M2 execution runtime
 
@@ -45,7 +45,7 @@ This does not provide cryptographic caller authentication, durable audit, atomic
 
 Every published MCP `tools/call` goes through the central [execution runtime](docs/EXECUTION_RUNTIME.md): trusted-launcher identity, exact operation/target grant, mandatory pre-execution audit, scoped credential request where required, bounded built-in adapter, output verification and terminal audit. M3 adds two vetted live observations: `builtin.linux.uname/v1` using pinned-host-key OpenSSH with a protected target-specific key mapping, and `builtin.https.health/v1` using certificate-validating HTTPS with a fixed health URL. Without a trusted `--ssh-credential-map`, SSH requests fail closed.
 
-Structured audit events go to stderr by default; for a local synchronized JSONL file, run from a trusted launcher with `--audit-log /protected/audit/events.jsonl` (outside the YAML directory). See [Audit](docs/AUDIT.md) for permissions, log retention and limitations. For transport setup and restrictions see [M3 observation adapters](docs/OBSERVATION_ADAPTERS.md) and [portable example](examples/m3-observations/README.md).
+Structured audit events go to stderr by default; for a local synchronized JSONL file, run from a trusted launcher with `--audit-log /protected/audit/events.jsonl` (outside the YAML directory). See [Audit](docs/AUDIT.md) for permissions, log retention and limitations. For M3 transport setup see [SSH/HTTPS observations](docs/OBSERVATION_ADAPTERS.md); for M4 see [authenticated MCP HTTP](docs/REMOTE_MCP_HTTP.md), [Vault SSH certificate brokerage](docs/VAULT_SSH.md), and [portable examples](examples/m4-remote/README.md).
 
 ## Parser fuzzing and MCP compatibility
 
@@ -61,7 +61,7 @@ The old unaudited `--config` JSON mode and its hard-coded `list_hosts`/`get_host
 
 - [Product requirements](docs/PRODUCT.md), [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md)
 - [Configuration](docs/CONFIGURATION.md), [Capabilities](docs/CAPABILITIES.md), [Adapters](docs/ADAPTERS.md)
-- [Security architecture](docs/SECURITY_ARCHITECTURE.md), [Execution runtime](docs/EXECUTION_RUNTIME.md), [M3 observations](docs/OBSERVATION_ADAPTERS.md), [Audit](docs/AUDIT.md), [Coding standards](docs/CODING_STANDARDS.md)
+- [Security architecture](docs/SECURITY_ARCHITECTURE.md), [Execution runtime](docs/EXECUTION_RUNTIME.md), [M3 observations](docs/OBSERVATION_ADAPTERS.md), [M4 OAuth HTTP](docs/REMOTE_MCP_HTTP.md), [Vault SSH](docs/VAULT_SSH.md), [Audit](docs/AUDIT.md), [Coding standards](docs/CODING_STANDARDS.md)
 - [Traceability matrix](docs/TRACEABILITY.md), [Machine-readable schemas](docs/SCHEMA_EXPORT.md), [ADRs](docs/adr/README.md)
 - [Test strategy](docs/TEST_STRATEGY.md), [Contributing](CONTRIBUTING.md), [Security policy](SECURITY.md)
 
@@ -78,6 +78,8 @@ python3 tests/reload_smoke.py  # Unix only
 python3 tests/mcp_modern_smoke.py  # MCP 2026-07-28 stateless
 python3 tests/audit_smoke.py  # audited stdio execution and denial
 python3 tests/transport_smoke.py  # disposable sshd and TLS target (requires CI prerequisites)
+python3 tests/http_auth_smoke.py  # JWT-authenticated HTTP with isolated callers
+python3 tests/vault_ssh_smoke.py  # disposable TLS signing CA and cert-only SSH
 # Additional schema drift and independent validation run in CI
 ~~~
 

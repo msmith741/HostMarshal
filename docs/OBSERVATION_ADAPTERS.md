@@ -57,7 +57,7 @@ For Linux observations, the **trusted local launcher**, not an AI client, suppli
 }
 ```
 
-Use a dedicated, minimally privileged remote user with **only key-based SSH access** and read-only permissions appropriate to its role. Ensure local identity and map files are mode 0600; keep their parent directories inaccessible to untrusted users. Password authentication is disabled and no ssh-agent key fallback is allowed. This provider references protected local files; it does not read private-key bytes into HostMarshal, fetch secrets from a remote provider, or issue short-lived credentials. That is future M4 work.
+Use a dedicated, minimally privileged remote user with **only key-based SSH access** and read-only permissions appropriate to its role. Ensure local identity and map files are mode 0600; keep their parent directories inaccessible to untrusted users. Password authentication is disabled and no ssh-agent key fallback is allowed. This provider references protected local files; it does not read private-key bytes into HostMarshal, fetch secrets from a remote provider, or issue short-lived credentials. An alternative M4 `--vault-ssh-config` provider issues short-lived certificates for the same vetted SSH operation; see [Vault SSH](VAULT_SSH.md).
 
 Prepare the pinned SSH host-key file using a **verified** host key obtained out of band. Do not blindly trust an unauthenticated `ssh-keyscan` result. Store the host's verified key under the stable inventory ID, e.g. `demo-linux ssh-ed25519 AAAA...`. HostMarshal uses `HostKeyAlias=demo-linux` and `StrictHostKeyChecking=yes`, does not update host keys automatically, and refuses mismatches. Rotation is an administrator-controlled trust update.
 
@@ -86,6 +86,6 @@ The target is **administratively approved** and may reside on a private network.
 - The SSH binary is `/usr/bin/ssh`; no execution occurs when it is absent. SSH host-key pinning and endpoint identities are verified at each connection, but target-side authorization still depends on remote account configuration.
 - SSH stdout is capped at 64 bytes and accepted only when exactly `Linux\n`. HTTP output contains status only; no server-provided body or headers are disclosed.
 - Deadlines include broker acquisition and adapter execution; killing a local SSH client does not prove remote work was interrupted. Do not authorize mutations using this mechanism.
-- The host OS identity/configuration, DNS, trusted CA/key material and a correctly scoped local key are essential security assumptions. Neither operation provides remote MCP authentication or a protected external audit service.
+- The host OS identity/configuration, DNS, trusted CA/key material and a correctly scoped local key are essential security assumptions. The operations themselves do not authenticate remote MCP clients or provide tamper-evident audit; optional M4 authenticated HTTP verifies access tokens per request behind a mandatory colocated TLS proxy. See [remote MCP](REMOTE_MCP_HTTP.md).
 
 See [ADR-0011](adr/0011-readonly-network-observation.md), [Architecture](ARCHITECTURE.md), [Audit](AUDIT.md) and [Traceability](TRACEABILITY.md).
