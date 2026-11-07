@@ -1,0 +1,16 @@
+[package]
+name = "hostmarshal"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Default-deny, capability-scoped infrastructure operations for MCP clients"
+repository = "https://github.com/msmith741/HostMarshal"
+readme = "README.md"
+publish = false
+
+[dependencies]
+anyhow = "1"
+rmcp = { version = "3.8", features = ["server", "macros", "schemars", "transport-io"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
