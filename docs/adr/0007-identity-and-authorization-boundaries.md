@@ -16,7 +16,7 @@ Establish subject identity from a **trusted local launcher/OS context** for stdi
 
 - The first shipped `AuthenticatedCaller` only models a **trusted local process launcher**; it is **not** an authentication mechanism for an arbitrary remote/stdin client. Future OIDC/mTLS credential verification is a separate interface and test gate, not implied by this acceptance.
 - The M2 `Authorizer` contract is a default-deny exact issuer/subject/capability/operation/target check. Trusted-label selection and rich policy languages are deferred.
-- The identity source must not be a tool parameter. The same authorization decision applies across both supported MCP wire eras, and legacy unaudited handlers must be removed.
+- The identity source must not be a tool parameter. The same authorization decision applies across both supported MCP wire eras, and legacy unaudited handlers must be removed. Offline `policy explain` is a local simulation/diagnostic with no execution authority, controlled by OS access to the configuration.
 
 ## Alternatives considered
 

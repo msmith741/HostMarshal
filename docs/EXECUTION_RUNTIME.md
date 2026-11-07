@@ -47,6 +47,10 @@ The initial trusted `builtin.inventory.inspect/v1` descriptor allows **Observe**
 7. Completion audit failure suppresses the response. This **cannot roll back a previously completed operation**; therefore mutation remains explicitly prohibited.
 8. Reload/revocation applies to requests beginning after an atomic snapshot swap; already-started static observations may complete on their previous immutable snapshot.
 
+## Offline policy diagnostics
+
+The CLI supports `hostmarshal policy explain <config-dir> --subject <local-subject> --capability <name> --target <host-id>`. This evaluates a simulated **trusted-launcher issuer** against a validated snapshot, returns a structured permit/deny and snapshot digest, and never calls the broker, adapter or network. File permissions must restrict who can inspect the configuration. This is **not** an authenticated session or a tool for acting as another user.
+
 ## Error model
 
 The coordinator exposes stable `RuntimeFailure` variants: `Unauthorized`, `InvalidInput`, `Unavailable`, `Busy`, `AuditUnavailable`, `BrokerUnavailable`, `AdapterFailed`, `TimedOut`, and `InvalidOutput`. MCP responses do not disclose exception messages, raw target endpoints, tokens or adapter stdout.

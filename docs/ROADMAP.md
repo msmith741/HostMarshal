@@ -28,7 +28,7 @@
 - Credential broker *interface* with mock secrets; scoped handles and no response leakage.
 - Policy-explain CLI and formal adversarial test suite.
 
-**M2 implementation:** `src/runtime.rs`, `src/authorization.rs`, `src/identity.rs`, `src/adapter.rs`, `src/credentials.rs`, and `src/audit.rs` now provide a central, typed, bounded and auditable execution path for the *only* built-in static-inventory operation. CI includes broker-scope, timeout, output-integrity, audit-failure and stdio JSONL integration tests. The old unaudited JSON handlers were retired rather than left as an authorization bypass.
+**M2 implementation:** `src/runtime.rs`, `src/authorization.rs`, `src/identity.rs`, `src/adapter.rs`, `src/credentials.rs`, and `src/audit.rs` now provide a central, typed, bounded and auditable execution path for the *only* built-in static-inventory operation. CI includes broker-scope, timeout, output-integrity, audit-failure and stdio JSONL integration tests. The local `policy explain` diagnostic and negative tests complete the M2 administrative-policy inspection interface. The old unaudited JSON handlers were retired rather than left as an authorization bypass.
 
 **Gate:** mock adapters cannot escape authorization, substitute endpoints/credentials, or modify intrinsic operation risk; audit and failure-mode tests pass. This gate applies to the trusted static-inventory/M2 mock environment, **not** real Linux/Proxmox/network operations, which remain prohibited until later security gates.
 

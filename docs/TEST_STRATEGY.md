@@ -59,7 +59,8 @@ A green bounded fuzz run is useful regression evidence but **not** exhaustive se
 ## M2 security regression suite
 
 - Rust coordinator tests: allowed precommit/success, denied subject/target/tool/input, no adapter or broker on denial, failure-to-audit precommit, broker error, mismatched scope and broker timeout, timed-out adapter, malformed result suppression, terminal audit failure.
-- MCP integration `tests/audit_smoke.py`: real stdio tool call, denied attempts, correlation ID pair, JSONL file mode and redaction (no input payload/token leaks). Legacy and stateless protocol tests still run on the same auditable handler.
+- MCP integration `tests/audit_smoke.py`: real stdio tool call, denied attempts, correlation ID pair, JSONL file mode and redaction (no input payload/token leaks).
+- CLI integration `tests/policy_explain_smoke.py`: allowed/denied/unknown identities and resources, malformed subject rejection and no credential/adapter path. Legacy and stateless protocol tests still run on the same auditable handler.
 - Tests should treat error messages as non-disclosing public contracts and audit records as structured privileged diagnostics, not remote telemetry.
 - For future live providers/operations, expand with crash recovery, credential expiry/revocation, sandbox escape, rate-limit, TLS/SSH trust, durable audit, sensitive-output classification and side-effect cancellation tests before enabling them.
 

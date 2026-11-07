@@ -15,7 +15,7 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 | FR-007 bounded observations | ADR-0006 | `src/adapter.rs` trusted static inventory adapter | runtime output/deadline tests, MCP smoke | Built-in static observation implemented; Linux/SSH/HTTP adapters deferred (M3) |
 | FR-008 credential brokerage | ADR-0008 | `src/credentials.rs`, `src/runtime.rs` | runtime broker outage/mismatched scope/broker deadline/denied-before-broker unit tests | Provider-neutral scoped interface implemented; production broker denies all; real backends deferred (M4) |
 | FR-009 audit records | ADR-0008 | `src/audit.rs`, `src/runtime.rs`, `--audit-log` CLI | runtime audit failure/redaction tests, `tests/audit_smoke.py` | Implemented for static MCP invocations; persistence optional, no tamper evidence |
-| FR-010 offline CLI validation | ADR-0003 | `hostmarshal config validate` | `tests/declarative_smoke.py` | In progress — validate, inspect and schema commands available; render/explain pending |
+| FR-010 offline CLI validation/explain | ADR-0003, ADR-0007 | `src/main.rs`, `src/authorization.rs` | `tests/declarative_smoke.py`, `tests/policy_explain_smoke.py` | Implemented for offline validate/inspect/schema and trusted-local policy explain; config render pending |
 | FR-011 MCP compatibility | ADR-0009 | `src/dynamic_mcp.rs`, `src/main.rs` | `tests/mcp_smoke.py`, `tests/mcp_modern_smoke.py` | Legacy and stateless stdio wire conformance preserved through the single M2 runtime; HTTP deferred |
 | FR-012 isolated plugins | ADR-0006 | Not implemented | Planned sandbox tests | Planned (M5) |
 | FR-013 schema conformance | ADR-0003 | `src/schema.rs`, `schemas/v1alpha1/` | `tests/schema_conformance.py`, schema drift CI | Implemented (tested) |
@@ -63,6 +63,7 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 - `src/runtime.rs`: centralized admission, policy checks, mandatory pre-execution audit, optional broker request, bounded adapter future, output validation and terminal audit. Negative tests cover no broker/adapter on denial, audit failure, mismatched credential lease, issuer-scoped discovery, broker/adapter deadlines, output tampering and error suppression.
 - `src/credentials.rs`: provider-neutral scoped `CredentialBroker` and opaque `CredentialLease`; **no production credential backend** is implemented. Test doubles prove scope enforcement only.
 - `src/audit.rs`: structured, redacted, reason-coded security events and file/stderr sinks. `tests/audit_smoke.py` verifies actual MCP invocations, matching correlation IDs, denial records, and a protected file.
+- Local offline `hostmarshal policy explain` provides structured issuer/subject/capability/target decisions without adapter or credential access; validated by `tests/policy_explain_smoke.py`. It does **not** impersonate a caller to execute operations.
 - The unaudited legacy `--config` JSON handlers were retired. The 2025 and 2026 **wire protocols** both run through this same runtime. See [Migration](MIGRATION.md).
 - M2 tests apply to **pure local static observation**. No production-grade remote identities, secrets, plugin isolation, mutation approvals, or tamper-evident audit are implied.
 

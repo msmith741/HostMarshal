@@ -8,7 +8,7 @@ HostMarshal is a vendor-neutral, pre-alpha Rust infrastructure capability gatewa
 
 ## Declarative M1 configuration + M2 execution runtime
 
-YAML resources under `config/v1alpha1/` define a fictional Host, a published Capability and an independent Grant. The capability references the compiled-in `builtin.inventory.inspect/v1` operation. The runtime validates resources before serving MCP and denies invocations without an exact matching local-launcher subject/capability/target grant.
+YAML resources under `config/v1alpha1/` define a fictional Host, a published Capability and an independent Grant. The capability references the compiled-in `builtin.inventory.inspect/v1` operation. The local `policy explain` command evaluates a simulated subject against a validated snapshot without invoking an adapter or accessing credentials; it requires administrator access to the config directory. The runtime validates resources before serving MCP and denies invocations without an exact matching local-launcher subject/capability/target grant.
 
 Requires Rust stable toolchain:
 
@@ -17,6 +17,8 @@ cargo test
 cargo run -- config validate config/v1alpha1
 cargo run -- config inspect config/v1alpha1
 cargo run -- config schema > hostmarshal-v1alpha1.schema.json
+cargo run -- policy explain config/v1alpha1 --subject example-operator \
+  --capability inventory.inspect --target sample-linux
 cargo run --locked -- --config-dir config/v1alpha1 --principal example-operator
 ~~~
 
