@@ -5,6 +5,7 @@ use std::{env, path::Path, sync::Arc};
 use anyhow::{Result, bail};
 use hostmarshal::{
     audit::{AuditSink, JsonlFileAudit, StderrAudit},
+    authorization::{AuthorizationRequest, Authorizer, GrantAuthorizer},
     credentials::DenyCredentialBroker,
     declarative::CompiledConfig,
     dynamic_mcp::DeclarativeMcp,
@@ -47,6 +48,50 @@ async fn main() -> Result<()> {
             println!("{}", hostmarshal::schema::resource_schema_json()?);
             Ok(())
         }
+        [
+            policy, explain, directory, subject_flag, subject, capability_flag, capability,
+            target_flag, target,
+        ] if policy == "policy"
+            && explain == "explain"
+            && subject_flag == "--subject"
+            && capability_flag == "--capability"
+            && target_flag == "--target" =>
+        {
+            // Offline local diagnostic. The caller does NOT gain execution authority.
+            // Only operators allowed to read the configuration should run this.
+            let snapshot = CompiledConfig::load(Path::new(directory))?;
+            let caller = AuthenticatedCaller::from_trusted_launcher(subject)?;
+            let operation = snapshot
+                .capabilities
+                .get(capability.as_str())
+                .map(|cap| cap.operation_ref.as_str())
+                .unwrap_or("<unresolved>");
+            let allowed = GrantAuthorizer
+                .authorize(AuthorizationRequest {
+                    snapshot: &snapshot,
+                    caller: &caller,
+                    capability,
+                    operation,
+                    target,
+                })
+                .permitted();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "apiVersion": "hostmarshal.io/v1alpha1",
+                    "subject": caller.subject(),
+                    "issuer": caller.issuer(),
+                    "capability": capability,
+                    "operation": operation,
+                    "target": target,
+                    "allowed": allowed,
+                    "reason": if allowed { "explicit_grant" } else { "not_authorized" },
+                    "snapshotDigest": snapshot.snapshot_digest,
+                    "diagnosticOnly": true,
+                }))?
+            );
+            Ok(())
+        }
         [flag, directory, principal_flag, principal]
             if flag == "--config-dir" && principal_flag == "--principal" =>
         {
@@ -69,6 +114,8 @@ async fn main() -> Result<()> {
             "usage: hostmarshal config validate <directory> | \
              hostmarshal config inspect <directory> | \
              hostmarshal config schema | \
+             hostmarshal policy explain <directory> --subject <launcher-subject> \
+                 --capability <name> --target <host-id> | \
              hostmarshal --config-dir <directory> --principal <trusted-launcher-subject> \
              [--audit-log <protected-file-path>] | \
              Use YAML resources; legacy --config JSON mode has been retired"
