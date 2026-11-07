@@ -94,21 +94,20 @@ impl OperationAdapter for LinuxUname {
                 .arg("-l")
                 .arg(&endpoint.user)
                 .arg("-p")
-                .arg(endpoint.port.to_string())
+                .arg(endpoint.port.to_string());
+            if let Some(cert_path) = lease.certificate_path() {
+                // OpenSSH options MUST precede the destination and fixed command.
+                command
+                    .arg("-o")
+                    .arg(format!("CertificateFile={}", cert_path.display()));
+            }
+            command
                 .arg(&host.address)
                 .arg("uname -s")
                 .stdin(Stdio::null())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
                 .kill_on_drop(true);
-
-            if let Some(cert_path) = lease.certificate_path() {
-                // A transient Vault-issued OpenSSH user certificate, bound to
-                // this already-approved target and key, never to MCP input.
-                command
-                    .arg("-o")
-                    .arg(format!("CertificateFile={}", cert_path.display()));
-            }
             let mut child = command.spawn().map_err(|_| AdapterFailure::Unavailable)?;
             let stdout = child.stdout.take().ok_or(AdapterFailure::Failed)?;
             let mut data = Vec::with_capacity(32);
