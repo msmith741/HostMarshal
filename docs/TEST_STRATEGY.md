@@ -19,7 +19,7 @@
 2. No grant returns an empty/filtered catalog or authorization denial as appropriate.
 3. Exact grants authorize only their intended subject, operation and resource.
 4. Capability metadata cannot downgrade operation risk, change adapter privileges or invent executables.
-5. Unknown YAML keys, duplicate names/keys, unsupported API versions, broken references and oversized documents fail validation.
+5. Unknown YAML keys, duplicate names/keys, unsupported API versions, broken references, oversized documents, aliases, custom tags, merges and excessive nesting fail validation.
 6. Tool schemas and error behavior are consistent through core, CLI and supported MCP versions.
 7. Atomic reload never exposes a partially validated permission set.
 

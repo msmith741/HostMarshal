@@ -13,11 +13,31 @@ async fn main() -> Result<()> {
         [command, validate, directory] if command == "config" && validate == "validate" => {
             let config = CompiledConfig::load(Path::new(directory))?;
             eprintln!(
-                "valid configuration: {} hosts, {} capabilities, {} grants",
+                "valid configuration: {} hosts, {} capabilities, {} grants; digest {}",
                 config.hosts.len(),
                 config.capabilities.len(),
-                config.grants.len()
+                config.grants.len(),
+                config.snapshot_digest
             );
+            Ok(())
+        }
+        [command, inspect, directory] if command == "config" && inspect == "inspect" => {
+            // This is an administrative local CLI operation, not an MCP tool.
+            let config = CompiledConfig::load(Path::new(directory))?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "apiVersion": "hostmarshal.io/v1alpha1",
+                    "snapshotDigest": config.snapshot_digest,
+                    "hosts": config.hosts.len(),
+                    "capabilities": config.capabilities.len(),
+                    "grants": config.grants.len(),
+                }))?
+            );
+            Ok(())
+        }
+        [command, schema] if command == "config" && schema == "schema" => {
+            println!("{}", hostmarshal::schema::resource_schema_json()?);
             Ok(())
         }
         [flag, directory, principal_flag, principal]
@@ -48,6 +68,8 @@ async fn main() -> Result<()> {
         }
         _ => bail!(
             "usage: hostmarshal config validate <directory> | \
+             hostmarshal config inspect <directory> | \
+             hostmarshal config schema | \
              hostmarshal --config-dir <directory> --principal <trusted-launcher-subject> | \
              hostmarshal --config <legacy-config.json>"
         ),

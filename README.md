@@ -15,12 +15,14 @@ Requires Rust stable toolchain:
 ~~~sh
 cargo test
 cargo run -- config validate config/v1alpha1
+cargo run -- config inspect config/v1alpha1
+cargo run -- config schema > hostmarshal-v1alpha1.schema.json
 cargo run -- --config-dir config/v1alpha1 --principal example-operator
 ~~~
 
 To use stdio MCP, point a trusted client's MCP server configuration at the compiled binary with the same `--config-dir` and `--principal` launcher arguments. **The launcher must be trusted**: stdio does not authenticate an arbitrary MCP peer, and the principal must not be chosen by the remote tool request.
 
-Additional capability manifests can reuse the existing inventory operation under different names. The initial validated schema subset must match the installed operation exactly; an unknown operation, command field or privilege escalation attempt is rejected. This is the **first vertical slice**, not a general-purpose YAML workflow executor.
+Additional capability manifests can reuse the existing inventory operation under different names. The initial validated schema subset must match the installed operation exactly; the parser uses explicit resource budgets. A SHA-256 digest identifies the effective validated configuration, but it is **not** a signature or trusted-source proof. The generated JSON Schema covers resource structure rather than semantic authorization; an unknown operation, command field or privilege escalation attempt is rejected. This is the **first vertical slice**, not a general-purpose YAML workflow executor.
 
 ## Legacy bootstrap compatibility
 
@@ -37,7 +39,7 @@ Legacy JSON and new YAML are intentionally distinct; legacy configuration must n
 - [Product requirements](docs/PRODUCT.md), [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md)
 - [Configuration](docs/CONFIGURATION.md), [Capabilities](docs/CAPABILITIES.md), [Adapters](docs/ADAPTERS.md)
 - [Security architecture](docs/SECURITY_ARCHITECTURE.md), [Coding standards](docs/CODING_STANDARDS.md)
-- [Traceability matrix](docs/TRACEABILITY.md), [ADRs](docs/adr/README.md)
+- [Traceability matrix](docs/TRACEABILITY.md), [Machine-readable schemas](docs/SCHEMA_EXPORT.md), [ADRs](docs/adr/README.md)
 - [Test strategy](docs/TEST_STRATEGY.md), [Contributing](CONTRIBUTING.md), [Security policy](SECURITY.md)
 
 ## Development

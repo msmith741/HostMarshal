@@ -4,6 +4,7 @@ pub mod config;
 pub mod declarative;
 pub mod dynamic_mcp;
 pub mod policy;
+pub mod schema;
 
 use std::sync::Arc;
 

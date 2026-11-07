@@ -7,16 +7,19 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail, ensure};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 const MAX_FILE_BYTES: u64 = 128 * 1024;
 const MAX_FILES: usize = 128;
 const MAX_RESOURCES: usize = 256;
 const API_VERSION: &str = "hostmarshal.io/v1alpha1";
 const OPERATION: &str = "builtin.inventory.inspect/v1";
+const MAX_DEPTH: usize = 32;
+const MAX_NODES_PER_FILE: usize = 10_000;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Metadata {
     pub name: String,
@@ -24,26 +27,26 @@ pub struct Metadata {
     pub labels: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct HostSpec {
     pub address: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Exposure {
     pub mcp: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct Limits {
     pub timeout: String,
     pub max_output_bytes: usize,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct CapabilitySpec {
     pub operation_ref: String,
@@ -54,21 +57,27 @@ pub struct CapabilitySpec {
     pub limits: Limits,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, schemars::JsonSchema,
+)]
 #[serde(deny_unknown_fields)]
 pub struct Subject {
     pub issuer: String,
     pub subject: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, schemars::JsonSchema,
+)]
 #[serde(deny_unknown_fields)]
 pub struct Targets {
     pub kind: String,
     pub names: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, schemars::JsonSchema,
+)]
 #[serde(deny_unknown_fields)]
 pub struct GrantSpec {
     pub subjects: Vec<Subject>,
@@ -76,7 +85,7 @@ pub struct GrantSpec {
     pub targets: Targets,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub enum Resource {
     Host {
@@ -99,13 +108,13 @@ pub enum Resource {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct HostRecord {
     pub metadata: Metadata,
     pub spec: HostSpec,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PublishedCapability {
     pub name: String,
     pub operation_ref: String,
@@ -119,6 +128,8 @@ pub struct CompiledConfig {
     pub hosts: BTreeMap<String, HostRecord>,
     pub capabilities: BTreeMap<String, PublishedCapability>,
     pub grants: Vec<GrantSpec>,
+    /// SHA-256 of effective validated configuration; not an authentication signature.
+    pub snapshot_digest: String,
 }
 
 fn valid_name(s: &str) -> bool {
@@ -147,6 +158,30 @@ pub fn output_schema() -> Value {
         "required": ["id", "hostname"],
         "additionalProperties": false
     })
+}
+
+/// Parse a resource-budgeted YAML stream without aliases, anchors or custom tags.
+pub fn parse_manifests(content: &str) -> Result<Vec<Resource>> {
+    ensure!(
+        content.len() as u64 <= MAX_FILE_BYTES,
+        "YAML input exceeds size limit"
+    );
+    let options = serde_saphyr::options! {
+        budget: serde_saphyr::budget! {
+            max_documents: MAX_RESOURCES,
+            max_depth: MAX_DEPTH,
+            max_nodes: MAX_NODES_PER_FILE,
+            max_events: 30_000,
+            max_aliases: 0,
+            max_anchors: 0,
+            max_merge_keys: 0,
+        },
+        merge_keys: serde_saphyr::MergeKeyPolicy::Error,
+        strict_booleans: true,
+        reject_unsupported_tags: true,
+    };
+    serde_saphyr::from_multiple_with_options(content, options)
+        .context("YAML parser rejected manifest")
 }
 
 impl CompiledConfig {
@@ -186,7 +221,7 @@ impl CompiledConfig {
                 content.len() as u64 <= MAX_FILE_BYTES,
                 "manifest exceeds size limit"
             );
-            let parsed: Vec<Resource> = serde_saphyr::from_multiple(&content)
+            let parsed = parse_manifests(&content)
                 .with_context(|| format!("invalid YAML in {}", path.display()))?;
             resources.extend(parsed);
             ensure!(resources.len() <= MAX_RESOURCES, "too many YAML resources");
@@ -302,10 +337,25 @@ impl CompiledConfig {
                 ensure!(hosts.contains_key(name), "grant references unknown host");
             }
         }
+        // These collections are set-like: canonical ordering prevents a harmless
+        // YAML file or grant-list reorder from changing the effective snapshot ID.
+        for grant in &mut grants {
+            grant.subjects.sort();
+            grant.capabilities.sort();
+            grant.targets.names.sort();
+        }
+        grants.sort();
+        let canonical =
+            serde_json::to_vec(&(API_VERSION, OPERATION, &hosts, &capabilities, &grants))?;
+        let mut hash = Sha256::new();
+        hash.update(b"hostmarshal-snapshot-v1\0");
+        hash.update(canonical);
+        let snapshot_digest = format!("sha256:{:x}", hash.finalize());
         Ok(Self {
             hosts,
             capabilities,
             grants,
+            snapshot_digest,
         })
     }
 
@@ -469,6 +519,58 @@ spec: {address: alpha.example.invalid}
         );
         let duplicate_key = "kind: Host\nkind: Grant\n";
         assert!(serde_saphyr::from_multiple::<Resource>(duplicate_key).is_err());
+    }
+
+    #[test]
+    fn snapshot_digest_is_stable_and_changes_with_authorization() {
+        let yaml = fixture();
+        let first = CompiledConfig::compile(parse(&yaml)).unwrap();
+        let mut docs = yaml.split("\n---\n").collect::<Vec<_>>();
+        docs.reverse();
+        let reversed = docs.join("\n---\n");
+        let second = CompiledConfig::compile(parse(&reversed)).unwrap();
+        assert_eq!(first.snapshot_digest, second.snapshot_digest);
+        assert!(first.snapshot_digest.starts_with("sha256:"));
+        assert_eq!(first.snapshot_digest.len(), 71);
+        let changed = yaml.replace("subject: operator", "subject: other");
+        let third = CompiledConfig::compile(parse(&changed)).unwrap();
+        assert_ne!(first.snapshot_digest, third.snapshot_digest);
+    }
+
+    #[test]
+    fn hardened_yaml_parser_rejects_anchors_tags_and_excessive_depth() {
+        let host = r#"apiVersion: hostmarshal.io/v1alpha1
+kind: Host
+metadata:
+  name: alpha
+  labels:
+    environment: staging
+spec:
+  address: alpha.example.invalid
+"#;
+        assert!(parse_manifests(host).is_ok());
+        let anchors = host.replace("name: alpha", "name: &id alpha");
+        assert!(parse_manifests(&anchors).is_err());
+        let aliases = host.replace(
+            "environment: staging",
+            "environment: &env staging\n    alternate: *env",
+        );
+        assert!(parse_manifests(&aliases).is_err());
+        let tag = host.replace("name: alpha", "name: !custom alpha");
+        assert!(parse_manifests(&tag).is_err());
+        let merge = host.replace("environment: staging", "<<: {environment: staging}");
+        assert!(parse_manifests(&merge).is_err());
+        let duplicate = host.replace("name: alpha", "name: alpha\n  name: bravo");
+        assert!(parse_manifests(&duplicate).is_err());
+
+        // inputSchema is an untyped JSON value during parsing, so without
+        // parser structural budgets this valid Capability envelope could parse.
+        let deep = format!(
+            "apiVersion: hostmarshal.io/v1alpha1\nkind: Capability\nmetadata: {{name: test}}\nspec:\n  operationRef: {OPERATION}\n  targetKind: Host\n  exposure: {{mcp: true}}\n  inputSchema: {}x{}\n  outputSchema: {{}}\n  limits: {{timeout: 2s, maxOutputBytes: 4096}}\n",
+            "[".repeat(MAX_DEPTH + 2),
+            "]".repeat(MAX_DEPTH + 2)
+        );
+        assert!(parse_manifests(&deep).is_err());
     }
 
     #[test]
