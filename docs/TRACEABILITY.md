@@ -1,22 +1,22 @@
 # Requirements-to-implementation traceability
 
-**Scope:** M1 declarative capability foundation, versioned schema, reload and parser/MCP conformance; updated 2026-11-07.
+**Scope:** M1 foundation plus M2 trusted execution, authorization, broker contracts and auditing; updated 2026-11-07.
 
 Status definitions: **Implemented (tested)** means corresponding unit/integration checks passed on CI; **In progress** means source exists but milestone acceptance is incomplete; **Planned** means no implementation. This document is not a security certification and should be checked against current CI before relying on the status.
 
-| Requirement | Design authority | Implementation artifact | Verification artifact | M1 status |
+| Requirement | Design authority | Implementation artifact | Verification artifact | Current status |
 | --- | --- | --- | --- | --- |
 | FR-001 YAML resources | ADR-0003 | `src/declarative.rs`, `src/schema.rs`, `config/v1alpha1/` | `declarative::tests`, `tests/declarative_smoke.py` | In progress — explicit parser budgets, generated Draft 2020-12 schema export, stable effective snapshot digest; checked-in versioned schema and independent conformance implemented; atomic reload and emergency denial available in local Unix mode |
 | FR-002 dynamic capabilities | ADR-0004 | `src/declarative.rs`, `src/dynamic_mcp.rs` | two-capabilities unit and smoke tests | In progress — builtin static inventory only |
 | FR-003 separation of authorities | ADR-0005 | fixed trusted built-in registry; capability and grant YAML separate | privilege override and denied invocation tests | In progress — deployment lifecycle RBAC not implemented |
-| FR-004 caller identity | ADR-0007 | `src/main.rs` trusted launcher principal | unauthorized subject in declarative smoke | In progress — no remote cryptographic auth |
+| FR-004 caller identity | ADR-0007 | `src/identity.rs`, `src/main.rs` | identity unit tests, denied-caller runtime/MCP tests | Implemented for trusted local stdio; OIDC/mTLS deferred (M4) |
 | FR-005 target resolution/deny | ADR-0004, ADR-0005, ADR-0007 | `src/declarative.rs` | denied target, no-grant and invalid capability tests | In progress — name-only selector subset |
-| FR-006 central execution | ADR-0002, ADR-0006 | `CompiledConfig::invoke` (mock inventory only) | unit/smoke test | In progress — no general execution coordinator |
-| FR-007 Linux adapter | ADR-0006 | Not implemented | Planned integration suite | Planned (M3) |
-| FR-008 credential brokerage | ADR-0008 | Not implemented | Planned security tests | Planned (M2–M4) |
-| FR-009 audit records | ADR-0008 | Not implemented | Planned fault injection | Planned (M2) |
-| FR-010 offline CLI validation | ADR-0003 | `hostmarshal config validate` | `tests/declarative_smoke.py` | In progress — validate, inspect and schema commands available; render/explain pending |
-| FR-011 MCP compatibility | ADR-0009 | `src/dynamic_mcp.rs`, `src/main.rs` | `tests/mcp_smoke.py`, `tests/mcp_modern_smoke.py` | In progress — legacy 2025 and stateless 2026 stdio tests; HTTP conformance remains deferred |
+| FR-006 central execution | ADR-0002, ADR-0006, ADR-0007 | `src/runtime.rs`, `src/authorization.rs`, `src/adapter.rs`, `src/dynamic_mcp.rs` | runtime unit tests (including lockdown and exhausted capacity), MCP audit and legacy-mode retirement smoke | Implemented for all supported declarative MCP tools; no unaudited legacy path |
+| FR-007 bounded observations | ADR-0006 | `src/adapter.rs` trusted static inventory adapter | runtime output/deadline tests, MCP smoke | Built-in static observation implemented; Linux/SSH/HTTP adapters deferred (M3) |
+| FR-008 credential brokerage | ADR-0008 | `src/credentials.rs`, `src/runtime.rs` | runtime broker outage/mismatched scope/broker deadline/denied-before-broker unit tests | Provider-neutral scoped interface implemented; production broker denies all; real backends deferred (M4) |
+| FR-009 audit records | ADR-0008 | `src/audit.rs`, `src/runtime.rs`, `--audit-log` CLI | runtime audit failure/redaction tests, `tests/audit_smoke.py` | Implemented for static MCP invocations; persistence optional, no tamper evidence |
+| FR-010 offline CLI validation/explain | ADR-0003, ADR-0007 | `src/main.rs`, `src/authorization.rs` | `tests/declarative_smoke.py`, `tests/policy_explain_smoke.py` | Implemented for offline validate/inspect/schema and trusted-local policy explain; config render pending |
+| FR-011 MCP compatibility | ADR-0009 | `src/dynamic_mcp.rs`, `src/main.rs` | `tests/mcp_smoke.py`, `tests/mcp_modern_smoke.py` | Legacy and stateless stdio wire conformance preserved through the single M2 runtime; HTTP deferred |
 | FR-012 isolated plugins | ADR-0006 | Not implemented | Planned sandbox tests | Planned (M5) |
 | FR-013 schema conformance | ADR-0003 | `src/schema.rs`, `schemas/v1alpha1/` | `tests/schema_conformance.py`, schema drift CI | Implemented (tested) |
 | FR-014 atomic activation and revocation | ADR-0003, ADR-0005 | `src/snapshot.rs`, `src/main.rs`, `src/dynamic_mcp.rs` | snapshot unit tests, `tests/reload_smoke.py` | Implemented (Unix, pre-alpha static inventory); live adapter cancellation and secure deployment pending |
@@ -54,6 +54,18 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 - `fuzz/fuzz_targets/yaml_manifest.rs` adds a true libFuzzer target and seed corpus with independent dependencies. CI runs a bounded 512-case coverage-guided smoke and `.github/workflows/fuzz.yml` provides scheduled/manual 60-second campaigns using a pinned nightly compiler.
 - `tests/mcp_smoke.py` tests the legacy `2025-11-25` initialize path, while `tests/mcp_modern_smoke.py` exercises `2026-07-28` stateless `server/discover` without initialization, per-request protocol metadata, restricted tool listings and denial outcomes.
 - These are **implemented test coverage**, not formal certification. Fuzzing is probabilistic, and HTTP, OAuth, and server-initiated features are out of scope for the current stdio-only implementation.
+
+## M2 runtime evidence and acceptance boundaries
+
+- `src/identity.rs`: authenticated caller identity is created from the trusted launcher, not MCP `clientInfo`. Network identities are not verified in M2.
+- `src/authorization.rs`: typed `AuthorizationRequest`, `AuthorizationDecision`, and `Authorizer`; the initial `GrantAuthorizer` enforces exact caller+operation+capability+target grants.
+- `src/adapter.rs`: typed `OperationDescriptor`, `OperationAdapter`, resolved target and execution request; only the trusted static inventory adapter is installed in production.
+- `src/runtime.rs`: centralized admission, policy checks, mandatory pre-execution audit, optional broker request, bounded adapter future, output validation and terminal audit. Negative tests cover no broker/adapter on denial, audit failure, mismatched credential lease, issuer-scoped discovery, broker/adapter deadlines, output tampering and error suppression.
+- `src/credentials.rs`: provider-neutral scoped `CredentialBroker` and opaque `CredentialLease`; **no production credential backend** is implemented. Test doubles prove scope enforcement only.
+- `src/audit.rs`: structured, redacted, reason-coded security events and file/stderr sinks. `tests/audit_smoke.py` verifies actual MCP invocations, matching correlation IDs, denial records, and a protected file.
+- Local offline `hostmarshal policy explain` provides structured issuer/subject/capability/target decisions without adapter or credential access; validated by `tests/policy_explain_smoke.py`. It does **not** impersonate a caller to execute operations.
+- The unaudited legacy `--config` JSON handlers were retired. The 2025 and 2026 **wire protocols** both run through this same runtime. See [Migration](MIGRATION.md).
+- M2 tests apply to **pure local static observation**. No production-grade remote identities, secrets, plugin isolation, mutation approvals, or tamper-evident audit are implied.
 
 ## CI acceptance rules
 

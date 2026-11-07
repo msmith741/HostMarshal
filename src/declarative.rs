@@ -6,7 +6,9 @@ use std::{
     path::Path,
 };
 
-use anyhow::{Context, Result, bail, ensure};
+#[cfg(test)]
+use anyhow::bail;
+use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -359,30 +361,52 @@ impl CompiledConfig {
         })
     }
 
-    /// Local/stdio identity is asserted by the trusted process launcher.
-    pub fn authorized(&self, principal: &str, capability: &str, target: &str) -> bool {
+    /// A verifier must authenticate the issuer and subject before this is called.
+    pub fn authorized_identity(
+        &self,
+        issuer: &str,
+        principal: &str,
+        capability: &str,
+        target: &str,
+    ) -> bool {
         self.capabilities.contains_key(capability)
             && self.hosts.contains_key(target)
             && self.grants.iter().any(|g| {
                 g.subjects
                     .iter()
-                    .any(|s| s.subject == principal && s.issuer == "local://trusted-launcher")
+                    .any(|s| s.subject == principal && s.issuer == issuer)
                     && g.capabilities.iter().any(|n| n == capability)
                     && g.targets.names.iter().any(|n| n == target)
             })
     }
 
-    pub fn visible_capabilities(&self, principal: &str) -> Vec<&PublishedCapability> {
+    /// Compatibility check for the existing trusted local launcher configuration.
+    pub fn authorized(&self, principal: &str, capability: &str, target: &str) -> bool {
+        self.authorized_identity("local://trusted-launcher", principal, capability, target)
+    }
+
+    /// The issuer and subject must come from authenticated transport context.
+    pub fn visible_capabilities_for(
+        &self,
+        issuer: &str,
+        principal: &str,
+    ) -> Vec<&PublishedCapability> {
         self.capabilities
             .values()
             .filter(|cap| {
                 self.hosts
                     .keys()
-                    .any(|host| self.authorized(principal, &cap.name, host))
+                    .any(|host| self.authorized_identity(issuer, principal, &cap.name, host))
             })
             .collect()
     }
 
+    /// Compatibility helper for tests modeling the local trusted launcher.
+    pub fn visible_capabilities(&self, principal: &str) -> Vec<&PublishedCapability> {
+        self.visible_capabilities_for("local://trusted-launcher", principal)
+    }
+
+    #[cfg(test)]
     pub fn invoke(&self, principal: &str, capability: &str, args: Value) -> Result<Value> {
         let Some(cap) = self.capabilities.get(capability) else {
             bail!("capability not found or not authorized");
@@ -479,6 +503,22 @@ spec:
                     json!({"target":"alpha","command":"id"})
                 )
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn catalog_never_confuses_identical_subjects_from_different_issuers() {
+        let config = CompiledConfig::compile(parse(&fixture())).unwrap();
+        assert!(
+            config
+                .visible_capabilities_for("https://different-issuer.example.invalid", "operator")
+                .is_empty()
+        );
+        assert_eq!(
+            config
+                .visible_capabilities_for("local://trusted-launcher", "operator")
+                .len(),
+            1
         );
     }
 

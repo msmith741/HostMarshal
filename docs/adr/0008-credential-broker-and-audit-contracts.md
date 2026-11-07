@@ -1,8 +1,8 @@
 # ADR-0008: Credential broker and audit contracts
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-07
-- **Deciders:** Maintainers (pending review)
+- **Deciders:** Project maintainer (M2 design review, 2026-11-07)
 
 ## Context
 
@@ -11,6 +11,13 @@ Real integrations need credentials, and security-focused operations need trustwo
 ## Decision
 
 Define provider-neutral credential and audit interfaces. The trusted runtime requests a credential **only after authorization** and only for the approved target/operation purpose. Providers return scoped handles or narrowly bounded secrets to adapters, not MCP clients. Audit events contain caller, decision, target, operation/config/policy digest, timing, outcome and correlation ID; never raw tokens or unbounded output. Providers and audit sinks are separately configured.
+
+## Acceptance clarifications
+
+- M2 ships a `CredentialBroker` interface, opaque scoped leases, and a production **deny-all** broker. Real Vault/cloud/local secret providers, renewal, and revocation are **not** implemented or approved.
+- M2 commits redacted `Authorized` audit events **before** credential access and adapter execution; an audit failure blocks that operation. A failed completion audit suppresses the response but cannot reverse an already-completed action, so all mutation remains prohibited.
+- Default audit goes to stderr; the optional file sink appends JSON Lines, checks restrictive file permissions, and calls `sync_data`. This is **not** tamper-evident, remote durable, or independent of the host administrator.
+- No user-provided command or arbitrary plugin is accepted. Built-in static observations and test mocks are the only M2 execution paths.
 
 ## Alternatives considered
 

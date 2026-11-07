@@ -1,6 +1,6 @@
 # Proposed architecture
 
-**Status:** accepted design principles from ADR-0003–0006; only the limited M1 declarative inventory slice is implemented, not the full proposed architecture. **Design goal:** transport independence, declarative capabilities, and security boundaries that apply to every adapter.
+**Status:** accepted ADR-0003–0008 design principles; M1 configuration and M2 security execution boundaries are implemented for **static inventory only**, not live infrastructure or untrusted plugins. **Design goal:** transport independence, declarative capabilities, and security boundaries that apply to every adapter.
 
 ## Logical diagram
 
@@ -76,6 +76,12 @@ apps/
 
 This is a **target layout**, not a demand to create all crates immediately. Favor one process and clear module contracts before splitting into deployable services.
 
+## Implemented M2 coordinator
+
+`src/runtime.rs` receives a verified local `AuthenticatedCaller`, acquires one immutable config snapshot, validates the operation/target/arguments, calls the `Authorizer`, commits pre-execution audit, requests an optional scoped credential, executes a typed trusted adapter under deadline/concurrency limits, validates its result and commits a terminal audit outcome. MCP has no direct adapter call. Stderr or optional protected file-backed JSON Lines records support audit of invocations; this is not tamper-evident. See [Execution Runtime](EXECUTION_RUNTIME.md) and [Audit](AUDIT.md).
+
+The old JSON-mode MCP handlers were **removed in M2** because they bypassed the coordinator. Both supported MCP wire eras now use the declarative pipeline. See [Migration](MIGRATION.md).
+
 ## Extension tiers
 
 1. A YAML capability binds an **already trusted** operation.
@@ -92,4 +98,4 @@ See [Capabilities](CAPABILITIES.md), [Adapters](ADAPTERS.md), [Configuration](CO
 
 ## Current bootstrap comparison
 
-Merged [PR #1](https://github.com/msmith741/HostMarshal/pull/1) demonstrates a basic Rust MCP server with two hard-coded tools, JSON-only static configuration and a launcher-asserted principal. It is a **prototype**, not an implementation of the YAML registry, authentication, plugins, auditing, or the architecture here. The implementation must be refactored against the approved architecture before adding real infrastructure integrations.
+Merged [PR #1](https://github.com/msmith741/HostMarshal/pull/1) was an early Rust MCP bootstrap. Its hard-coded tools and JSON mode were retired during M2, leaving only the validated declarative invocation path. External authentication, live adapters and plugin isolation remain separate future requirements.

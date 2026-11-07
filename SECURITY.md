@@ -1,6 +1,6 @@
 # Security policy
 
-**Status:** no supported production release. Design documents and examples are not security guarantees. The merged bootstrap code is a proof of concept and lacks live authentication, credential brokerage, and audit persistence.
+**Status:** no supported production release. Design documents and examples are not security guarantees. The declarative M2 runtime supports audited static-inventory observations, but no real credential backend, remote authentication, or tamper-evident audit. The old unaudited JSON handlers were retired.
 
 ## Reporting vulnerabilities
 

@@ -1,27 +1,27 @@
 # Adapter and plugin architecture
 
-**Status:** ADR-0006 Accepted. No public adapter SDK or sandbox protocol currently exists; the implemented M1 operation is trusted static inventory only.
+**Status:** ADR-0006 Accepted. The M2 Rust `OperationAdapter` trait and `OperationDescriptor` are implemented for **trusted in-process built-ins and test doubles only**. A public external plugin SDK and sandbox protocol do not yet exist.
 
 ## Purpose
 
 An adapter is a reusable implementation of a **bounded, typed operation**, not a delegation of unrestricted command execution. Keep vendor-specific APIs outside the core; Linux, Proxmox, Kubernetes, networking and secrets are optional integrations.
 
-## Core interface (conceptual, not compiled Rust)
+## Implemented Rust adapter contract (M2)
 
-~~~rust
-trait OperationAdapter {
-    fn describe(&self) -> OperationDescriptor;
-    async fn invoke(
+```rust
+pub trait OperationAdapter: Send + Sync {
+    fn descriptor(&self) -> &'static OperationDescriptor;
+
+    fn execute(
         &self,
-        operation: ValidatedOperation,
-        target: ResolvedTarget,
-        context: RestrictedExecutionContext,
-        input: ValidatedInput,
-    ) -> Result<ValidatedOutput, OperationError>;
+        request: AdapterInvocation,
+    ) -> Pin<Box<dyn Future<Output = Result<Value, AdapterFailure>> + Send + '_>>;
 }
-~~~
+```
 
-The runtime, not the adapter, produces `ValidatedOperation`, `ResolvedTarget` and the authorization decision. `RestrictedExecutionContext` exposes only explicitly granted services (e.g., a scoped outbound client and credential handle). Adapter descriptors declare minimum required effects; they are not themselves proof that unsafe code is harmless.
+A trusted `OperationDescriptor` fixes operation ID, effect class, supported resource kind, maximum timeout and bytes, and any required credential purpose. The runtime creates `AdapterInvocation` with a resolved target from trusted inventory, validated input, and optionally an opaque scoped lease. The provider-neutral `CredentialBroker` contract is asynchronous and its request shares the adapter's absolute deadline; the lease scope must match the trusted operation, target and purpose exactly. The adapter cannot create the caller identity, policy permit, or audit event; those belong to the coordinator.
+
+A builtin adapter may return only the vetted static inventory output in M2. The coordinator double-checks that the returned content exactly matches the authorized target and fits the output budget. The only real installed implementation is `builtin.inventory.inspect/v1`, with **no network or shell execution**. Test-only adapters exercise failures and deadlines. Future external plugins require a separate OS-enforced sandbox and versioned protocol (M5).
 
 ## Required operation invariants
 

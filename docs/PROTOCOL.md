@@ -25,7 +25,7 @@ M1 uses immutable per-request snapshots. On a successful Unix SIGHUP, a new tool
 
 ## Protocol conformance testing
 
-HostMarshal tests **two distinct protocol eras** over actual stdio sessions in CI:
+HostMarshal tests **two distinct protocol eras** over actual stdio sessions in CI. Since M2, both eras use the **single audited declarative runtime**; the legacy JSON-mode handlers have been removed:
 
 | Era | Wire sequence | Test |
 | --- | --- | --- |

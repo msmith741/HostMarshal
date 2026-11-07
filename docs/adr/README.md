@@ -1,6 +1,6 @@
 # Architecture decision records
 
-**Status:** ADR-0003 through ADR-0006 were reviewed and **Accepted** on 2026-11-07 with explicit acceptance clarifications; the remaining ADRs are Proposed. Acceptance is a design decision, not evidence that planned controls are implemented.
+**Status:** ADR-0003 through ADR-0008 were reviewed and **Accepted** (0007–0008 during M2 on 2026-11-07) with explicit scope and security clarifications. ADR-0001, 0002, 0009, 0010 remain Proposed. Acceptance is a design decision, not proof that future controls are implemented.
 
 | ID | Title | Status |
 | --- | --- | --- |
@@ -10,8 +10,8 @@
 | [0004](0004-dynamic-capabilities-and-operation-registry.md) | Dynamic capabilities and trusted operation registry | Accepted |
 | [0005](0005-separate-install-publish-and-invoke-authority.md) | Separate installation, publication and invocation authority | Accepted |
 | [0006](0006-typed-adapters-and-external-isolation.md) | Typed adapters and plugin isolation | Accepted |
-| [0007](0007-identity-and-authorization-boundaries.md) | Identity and authorization interfaces | Proposed |
-| [0008](0008-credential-broker-and-audit-contracts.md) | Credential broker and audit contracts | Proposed |
+| [0007](0007-identity-and-authorization-boundaries.md) | Identity and authorization interfaces | Accepted |
+| [0008](0008-credential-broker-and-audit-contracts.md) | Credential broker and audit contracts | Accepted |
 | [0009](0009-mcp-is-a-protocol-adapter.md) | MCP as a protocol adapter | Proposed |
 | [0010](0010-versioning-and-compatibility.md) | Versioning and compatibility | Proposed |
 

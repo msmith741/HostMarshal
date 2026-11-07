@@ -16,7 +16,9 @@
 - Small built-in mock/inventory operation catalog, **not** general shell execution.
 - Refactor the merged hard-coded bootstrap implementation against these contracts; add checked-in `Cargo.lock`.
 
-**Progress (partial):** versioned strict YAML parsing, one trusted static-inventory operation, local launcher identity, dynamic MCP listing/invocation, and validation CLI are being implemented in the first M1 slice. A generated machine-readable resource schema, parser security budgets, and a SHA-256 effective snapshot digest are implemented in the next M1 slice. Checked-in versioned schemas, independent schema-conformance CI and `Cargo.lock` are now added. Runtime atomic SIGHUP reload and SIGUSR1 emergency deny are now supported for trusted Unix stdio deployments. Parser fuzzing and a two-era MCP **stdio** conformance matrix are now implemented, including a bounded coverage-guided target and scheduled fuzz workflow. Legacy bootstrap migration/removal, configurable adapter contracts, and future authenticated HTTP conformance are still open.\n\n**Gate:** adding a YAML-only capability over an existing vetted mock operation needs no Rust change; authorized calls succeed and denied calls never reach the adapter; malformed or privilege-escalating manifests fail load. Test at least one legacy and the current supported MCP version.
+**Progress (partial):** versioned strict YAML parsing, one trusted static-inventory operation, local launcher identity, dynamic MCP listing/invocation, and validation CLI are being implemented in the first M1 slice. A generated machine-readable resource schema, parser security budgets, and a SHA-256 effective snapshot digest are implemented in the next M1 slice. Checked-in versioned schemas, independent schema-conformance CI and `Cargo.lock` are now added. Runtime atomic SIGHUP reload and SIGUSR1 emergency deny are now supported for trusted Unix stdio deployments. Parser fuzzing and a two-era MCP **stdio** conformance matrix are now implemented, including a bounded coverage-guided target and scheduled fuzz workflow. Legacy JSON bootstrap retirement is addressed in M2; typed built-in adapter contracts are implemented in M2. Future authenticated HTTP conformance remains open.
+
+**Gate:** adding a YAML-only capability over an existing vetted mock operation needs no Rust change; authorized calls succeed and denied calls never reach the adapter; malformed or privilege-escalating manifests fail load. Test at least one legacy and the current supported MCP version.
 
 ## M2 — Security-enforcing execution runtime
 
@@ -26,7 +28,9 @@
 - Credential broker *interface* with mock secrets; scoped handles and no response leakage.
 - Policy-explain CLI and formal adversarial test suite.
 
-**Gate:** mock adapters cannot escape authorization, substitute endpoints/credentials, or modify intrinsic operation risk; audit and failure-mode tests pass.
+**M2 implementation:** `src/runtime.rs`, `src/authorization.rs`, `src/identity.rs`, `src/adapter.rs`, `src/credentials.rs`, and `src/audit.rs` now provide a central, typed, bounded and auditable execution path for the *only* built-in static-inventory operation. CI includes broker-scope, timeout, output-integrity, audit-failure and stdio JSONL integration tests. The local `policy explain` diagnostic and negative tests complete the M2 administrative-policy inspection interface. The old unaudited JSON handlers were retired rather than left as an authorization bypass.
+
+**Gate:** mock adapters cannot escape authorization, substitute endpoints/credentials, or modify intrinsic operation risk; audit and failure-mode tests pass. This gate applies to the trusted static-inventory/M2 mock environment, **not** real Linux/Proxmox/network operations, which remain prohibited until later security gates.
 
 ## M3 — Real observation adapters
 

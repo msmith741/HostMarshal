@@ -67,12 +67,14 @@ M1 accepts schemas only when structurally identical to the trusted builtin opera
 
 ## CLI and failure behavior
 
-CLI design (`config validate`, `config inspect` and `config schema` implemented):
+CLI design (`config validate`, `config inspect`, `config schema` and local `policy explain` implemented):
 
 ~~~sh
 hostmarshal config validate ./config
 hostmarshal config inspect ./config
 hostmarshal config schema > hostmarshal-v1alpha1.schema.json
+hostmarshal policy explain ./config --subject example-operator \
+  --capability inventory.inspect --target sample-linux
 hostmarshal config render ./config
 hostmarshal capabilities list
 hostmarshal policy explain --subject example-operator --capability inventory.inspect --target sample-linux
@@ -80,7 +82,7 @@ hostmarshal policy explain --subject example-operator --capability inventory.ins
 
 The schema export is derived from the Rust resource types and is structural. Semantic validation of trusted operation IDs, cross-references, schema equality, and authorization still happens in trusted code. The SHA-256 digest is computed over the normalized **effective** snapshot and is not a signature or proof of source/binary integrity. The parser rejects anchors, aliases, merges and custom tags and applies explicit resource budgets. TOCTOU file-replacement risks remain for later secure deployment hardening.
 
-`policy explain` is an administrative diagnostic, not an identity-spoofing invocation interface; authorization and caller identity for that command must follow a separate trusted local context. Validation errors must identify file, resource, field, constraint and remediation without printing secrets.
+`policy explain` is an implemented administrative diagnostic, not an identity-spoofing invocation interface; authorization and caller identity for that command must follow a separate trusted local context. Validation errors must identify file, resource, field, constraint and remediation without printing secrets.
 
 ## Backward compatibility and rollout
 
