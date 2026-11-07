@@ -9,12 +9,12 @@ use hostmarshal::{
     credentials::{CredentialBroker, DenyCredentialBroker, LocalSshKeyBroker},
     declarative::CompiledConfig,
     dynamic_mcp::DeclarativeMcp,
-    identity::AuthenticatedCaller,
     http_auth::JwtVerifier,
     http_server,
+    identity::AuthenticatedCaller,
     runtime::ExecutionCoordinator,
-    vault::VaultSshCertBroker,
     snapshot::ConfigStore,
+    vault::VaultSshCertBroker,
 };
 use rmcp::{ServiceExt, transport::stdio};
 
@@ -102,11 +102,25 @@ async fn main() -> Result<()> {
             );
             Ok(())
         }
-        [http, serve, dir, bind_flag, bind, issuer_flag, issuer,
-            resource_flag, resource, jwks_flag, jwks, rest @ ..]
-            if http == "http" && serve == "serve"
-                && bind_flag == "--bind" && issuer_flag == "--issuer"
-                && resource_flag == "--resource" && jwks_flag == "--jwks-file" =>
+        [
+            http,
+            serve,
+            dir,
+            bind_flag,
+            bind,
+            issuer_flag,
+            issuer,
+            resource_flag,
+            resource,
+            jwks_flag,
+            jwks,
+            rest @ ..,
+        ] if http == "http"
+            && serve == "serve"
+            && bind_flag == "--bind"
+            && issuer_flag == "--issuer"
+            && resource_flag == "--resource"
+            && jwks_flag == "--jwks-file" =>
         {
             let mut audit_path = None;
             let mut ssh_map = None;

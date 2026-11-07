@@ -105,7 +105,9 @@ impl OperationAdapter for LinuxUname {
             if let Some(cert_path) = lease.certificate_path() {
                 // A transient Vault-issued OpenSSH user certificate, bound to
                 // this already-approved target and key, never to MCP input.
-                command.arg("-o").arg(format!("CertificateFile={}", cert_path.display()));
+                command
+                    .arg("-o")
+                    .arg(format!("CertificateFile={}", cert_path.display()));
             }
             let mut child = command.spawn().map_err(|_| AdapterFailure::Unavailable)?;
             let stdout = child.stdout.take().ok_or(AdapterFailure::Failed)?;

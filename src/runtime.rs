@@ -293,7 +293,13 @@ impl ExecutionCoordinator {
         let lease = match desc.credential {
             CredentialRequirement::None => None,
             CredentialRequirement::Scoped { purpose } => {
-                let expected = CredentialScope::for_caller(desc.id, &target, purpose, caller.issuer(), caller.subject());
+                let expected = CredentialScope::for_caller(
+                    desc.id,
+                    &target,
+                    purpose,
+                    caller.issuer(),
+                    caller.subject(),
+                );
                 match timeout_at(deadline, self.broker.acquire(expected.clone())).await {
                     Ok(Ok(received)) if received.scope() == &expected => Some(received),
                     Err(_) => return self.fail(&event, RuntimeFailure::TimedOut),

@@ -20,12 +20,6 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: M4 bootstrap lock artifact
-        run: |
-          cargo generate-lockfile
-          echo 'M4_LOCK_BEGIN'
-          base64 -w0 Cargo.lock | fold -w 120 | sed 's/^/M4_LOCK64 /'
-          echo 'M4_LOCK_END'
       - name: Enforce locked dependency resolution
         run: cargo metadata --locked --format-version 1 > /dev/null
       - name: Check formatting

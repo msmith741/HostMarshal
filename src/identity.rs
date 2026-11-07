@@ -18,7 +18,9 @@ pub struct AuthenticatedCaller {
 fn valid_subject(subject: &str) -> bool {
     !subject.is_empty()
         && subject.len() <= 128
-        && subject.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_'))
+        && subject
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_'))
 }
 
 /// Remote issuers must be stable https identities, not arbitrary client strings.
@@ -26,7 +28,9 @@ pub fn valid_remote_issuer(issuer: &str) -> bool {
     if issuer.len() > 512 || issuer.is_empty() {
         return false;
     }
-    let Ok(url) = url::Url::parse(issuer) else { return false };
+    let Ok(url) = url::Url::parse(issuer) else {
+        return false;
+    };
     url.scheme() == "https"
         && url.host_str().is_some()
         && url.username().is_empty()
@@ -58,9 +62,15 @@ impl AuthenticatedCaller {
         })
     }
 
-    pub fn issuer(&self) -> &str { &self.issuer }
-    pub fn subject(&self) -> &str { &self.subject }
-    pub fn method(&self) -> AuthenticationMethod { self.method }
+    pub fn issuer(&self) -> &str {
+        &self.issuer
+    }
+    pub fn subject(&self) -> &str {
+        &self.subject
+    }
+    pub fn method(&self) -> AuthenticationMethod {
+        self.method
+    }
 }
 
 #[cfg(test)]
@@ -81,6 +91,9 @@ mod tests {
         }
         let principal = AuthenticatedCaller::from_trusted_launcher("example-operator").unwrap();
         assert_eq!(principal.issuer(), "local://trusted-launcher");
-        assert_eq!(principal.method(), AuthenticationMethod::TrustedLocalLauncher);
+        assert_eq!(
+            principal.method(),
+            AuthenticationMethod::TrustedLocalLauncher
+        );
     }
 }

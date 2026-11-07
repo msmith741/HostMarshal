@@ -53,7 +53,8 @@ pub struct VaultSshCertBroker {
 fn valid_path_segment(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= 64
-        && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
 }
 
 impl VaultSshCertBroker {
@@ -106,7 +107,10 @@ impl VaultSshCertBroker {
                 "invalid identity target"
             );
             ensure!(valid_path_segment(&id.role), "invalid Vault signing role");
-            ensure!(valid_path_segment(&id.principal), "invalid Vault SSH principal");
+            ensure!(
+                valid_path_segment(&id.principal),
+                "invalid Vault SSH principal"
+            );
             check_private_key_file(&id.identity_file)?;
             check_public_trust_file(&id.public_key_file)?;
             ensure!(
@@ -129,8 +133,12 @@ impl VaultSshCertBroker {
         }
         // Caller identity is supplied by the trusted runtime, never by YAML
         // input or a caller-provided Vault role.
-        let Some(subject) = scope.subject() else { return Err(BrokerFailure::Denied) };
-        let Some(_issuer) = scope.issuer() else { return Err(BrokerFailure::Denied) };
+        let Some(subject) = scope.subject() else {
+            return Err(BrokerFailure::Denied);
+        };
+        let Some(_issuer) = scope.issuer() else {
+            return Err(BrokerFailure::Denied);
+        };
         let Some(entry) = self.identities.get(scope.target()) else {
             return Err(BrokerFailure::Denied);
         };
@@ -142,9 +150,8 @@ impl VaultSshCertBroker {
         if token_raw.len() > 4096 {
             return Err(BrokerFailure::Denied);
         }
-        let token = Zeroizing::new(
-            String::from_utf8(token_raw).map_err(|_| BrokerFailure::Denied)?
-        );
+        let token =
+            Zeroizing::new(String::from_utf8(token_raw).map_err(|_| BrokerFailure::Denied)?);
         let token = token.trim();
         let header = HeaderValue::from_str(token).map_err(|_| BrokerFailure::Denied)?;
         if token.is_empty() {
@@ -155,11 +162,12 @@ impl VaultSshCertBroker {
         if public_key.len() > 4096 || public_key.split_whitespace().count() < 2 {
             return Err(BrokerFailure::Denied);
         }
-        let url = self.base_url.join(&format!(
-            "/v1/{}/sign/{}",
-            self.mount, entry.role
-        )).map_err(|_| BrokerFailure::Unavailable)?;
-        let result = self.client
+        let url = self
+            .base_url
+            .join(&format!("/v1/{}/sign/{}", self.mount, entry.role))
+            .map_err(|_| BrokerFailure::Unavailable)?;
+        let result = self
+            .client
             .post(url)
             .header("X-Vault-Token", header)
             .json(&json!({
@@ -169,21 +177,29 @@ impl VaultSshCertBroker {
                 "ttl": "60s",
                 "key_id": format!("hostmarshal:{}:{}", subject, scope.target())
             }))
-            .send().await.map_err(|_| BrokerFailure::Unavailable)?;
+            .send()
+            .await
+            .map_err(|_| BrokerFailure::Unavailable)?;
         if !result.status().is_success() {
             return Err(BrokerFailure::Denied);
         }
         let mut content = Vec::new();
         let mut response = result;
-        while let Some(chunk) = response.chunk().await.map_err(|_| BrokerFailure::Unavailable)? {
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| BrokerFailure::Unavailable)?
+        {
             if content.len().saturating_add(chunk.len()) > 16 * 1024 {
                 return Err(BrokerFailure::Denied);
             }
             content.extend_from_slice(&chunk);
         }
-        let body: serde_json::Value = serde_json::from_slice(&content)
-            .map_err(|_| BrokerFailure::Unavailable)?;
-        let cert = body.pointer("/data/signed_key").and_then(|v| v.as_str())
+        let body: serde_json::Value =
+            serde_json::from_slice(&content).map_err(|_| BrokerFailure::Unavailable)?;
+        let cert = body
+            .pointer("/data/signed_key")
+            .and_then(|v| v.as_str())
             .ok_or(BrokerFailure::Unavailable)?;
         let mut fields = cert.split_whitespace();
         let kind = fields.next().ok_or(BrokerFailure::Denied)?;
@@ -192,7 +208,9 @@ impl VaultSshCertBroker {
             || kind.len() > 96
             || encoded.len() > 8192
             || encoded.len() < 64
-            || !encoded.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'='))
+            || !encoded
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'='))
         {
             return Err(BrokerFailure::Denied);
         }
@@ -204,7 +222,8 @@ impl VaultSshCertBroker {
         // No signed certificate or private-key material is returned over MCP.
         let mut file = tempfile::Builder::new()
             .prefix("hostmarshal-ssh-cert-")
-            .tempfile().map_err(|_| BrokerFailure::Unavailable)?;
+            .tempfile()
+            .map_err(|_| BrokerFailure::Unavailable)?;
         write!(file, "{kind} {encoded}\n").map_err(|_| BrokerFailure::Unavailable)?;
         file.flush().map_err(|_| BrokerFailure::Unavailable)?;
         Ok(CredentialLease::with_signed_certificate(
@@ -216,8 +235,11 @@ impl VaultSshCertBroker {
 }
 
 impl CredentialBroker for VaultSshCertBroker {
-    fn acquire(&self, scope: CredentialScope) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<CredentialLease, BrokerFailure>> + Send + '_>
+    fn acquire(
+        &self,
+        scope: CredentialScope,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<CredentialLease, BrokerFailure>> + Send + '_>,
     > {
         Box::pin(self.issue(scope))
     }

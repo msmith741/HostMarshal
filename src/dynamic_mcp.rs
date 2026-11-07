@@ -25,12 +25,18 @@ pub struct DeclarativeMcp {
 
 impl DeclarativeMcp {
     pub fn new(runtime: Arc<ExecutionCoordinator>, caller: AuthenticatedCaller) -> Self {
-        Self { runtime, caller: Some(caller) }
+        Self {
+            runtime,
+            caller: Some(caller),
+        }
     }
 
     /// A stateless HTTP handler binds identity on each validated HTTP request.
     pub fn for_authenticated_http(runtime: Arc<ExecutionCoordinator>) -> Self {
-        Self { runtime, caller: None }
+        Self {
+            runtime,
+            caller: None,
+        }
     }
 
     fn caller_for(&self, context: &RequestContext<RoleServer>) -> Option<AuthenticatedCaller> {
@@ -39,7 +45,8 @@ impl DeclarativeMcp {
         }
         // Only the authenticated axum middleware inserts this opaque type.
         // Raw client headers, clientInfo, MCP params and request IDs are NOT identity.
-        context.extensions
+        context
+            .extensions
             .get::<axum::http::request::Parts>()
             .and_then(|parts| parts.extensions.get::<AuthenticatedCaller>())
             .cloned()

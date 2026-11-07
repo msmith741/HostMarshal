@@ -46,8 +46,12 @@ impl CredentialScope {
         scope
     }
 
-    pub fn issuer(&self) -> Option<&str> { self.issuer.as_deref() }
-    pub fn subject(&self) -> Option<&str> { self.subject.as_deref() }
+    pub fn issuer(&self) -> Option<&str> {
+        self.issuer.as_deref()
+    }
+    pub fn subject(&self) -> Option<&str> {
+        self.subject.as_deref()
+    }
 
     pub fn operation(&self) -> &str {
         &self.operation
@@ -82,7 +86,11 @@ impl CredentialLease {
         key_path: String,
         cert_file: tempfile::NamedTempFile,
     ) -> Self {
-        Self { scope, opaque_handle: key_path, certificate_file: Some(cert_file) }
+        Self {
+            scope,
+            opaque_handle: key_path,
+            certificate_file: Some(cert_file),
+        }
     }
 
     pub fn certificate_path(&self) -> Option<&Path> {
