@@ -525,11 +525,9 @@ spec: {address: alpha.example.invalid}
     fn snapshot_digest_is_stable_and_changes_with_authorization() {
         let yaml = fixture();
         let first = CompiledConfig::compile(parse(&yaml)).unwrap();
-        let reversed = yaml
-            .split("\n---\n")
-            .rev()
-            .collect::<Vec<_>>()
-            .join("\n---\n");
+        let mut docs = yaml.split("\n---\n").collect::<Vec<_>>();
+        docs.reverse();
+        let reversed = docs.join("\n---\n");
         let second = CompiledConfig::compile(parse(&reversed)).unwrap();
         assert_eq!(first.snapshot_digest, second.snapshot_digest);
         assert!(first.snapshot_digest.starts_with("sha256:"));
