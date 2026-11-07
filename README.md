@@ -39,6 +39,12 @@ A successful reload applies changed grants to newly starting calls; already-star
 
 This does not provide cryptographic caller authentication, durable audit, atomic on-disk configuration deployment, or cancellation/revocation guarantees for future live adapters. See [Security Architecture](docs/SECURITY_ARCHITECTURE.md).
 
+## Parser fuzzing and MCP compatibility
+
+The regular Rust CI suite includes a deterministic mutation test for the YAML loader. The separate [fuzz workspace](fuzz/README.md) supports `cargo-fuzz` coverage-guided campaigns, with a bounded CI smoke and a weekly/manual workflow.
+
+MCP tests cover two stdio protocol eras: `2025-11-25` uses `initialize`; `2026-07-28` uses `server/discover` and stateless request metadata. Neither client-provided `clientInfo` value establishes authorization identity.
+
 ## Legacy bootstrap compatibility
 
 The initial two static tools can still be exercised temporarily through:
@@ -67,6 +73,7 @@ cargo build --locked --bin hostmarshal
 python3 tests/mcp_smoke.py
 python3 tests/declarative_smoke.py
 python3 tests/reload_smoke.py  # Unix only
+python3 tests/mcp_modern_smoke.py  # MCP 2026-07-28 stateless
 # Additional schema drift and independent validation run in CI
 ~~~
 

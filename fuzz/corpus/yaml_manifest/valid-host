@@ -1,0 +1,6 @@
+apiVersion: hostmarshal.io/v1alpha1
+kind: Host
+metadata:
+  name: sample
+spec:
+  address: sample.example.invalid

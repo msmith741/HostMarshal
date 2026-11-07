@@ -1,6 +1,6 @@
 # Requirements-to-implementation traceability
 
-**Scope:** M1 declarative capability foundation and versioned schema release; updated 2026-11-07 (reload slice).
+**Scope:** M1 declarative capability foundation, versioned schema, reload and parser/MCP conformance; updated 2026-11-07.
 
 Status definitions: **Implemented (tested)** means corresponding unit/integration checks passed on CI; **In progress** means source exists but milestone acceptance is incomplete; **Planned** means no implementation. This document is not a security certification and should be checked against current CI before relying on the status.
 
@@ -16,11 +16,11 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 | FR-008 credential brokerage | ADR-0008 | Not implemented | Planned security tests | Planned (M2–M4) |
 | FR-009 audit records | ADR-0008 | Not implemented | Planned fault injection | Planned (M2) |
 | FR-010 offline CLI validation | ADR-0003 | `hostmarshal config validate` | `tests/declarative_smoke.py` | In progress — validate, inspect and schema commands available; render/explain pending |
-| FR-011 MCP compatibility | ADR-0009 | `src/dynamic_mcp.rs` | legacy MCP stdio smoke | In progress — current-version conformance pending |
+| FR-011 MCP compatibility | ADR-0009 | `src/dynamic_mcp.rs`, `src/main.rs` | `tests/mcp_smoke.py`, `tests/mcp_modern_smoke.py` | In progress — legacy 2025 and stateless 2026 stdio tests; HTTP conformance remains deferred |
 | FR-012 isolated plugins | ADR-0006 | Not implemented | Planned sandbox tests | Planned (M5) |
 | FR-013 schema conformance | ADR-0003 | `src/schema.rs`, `schemas/v1alpha1/` | `tests/schema_conformance.py`, schema drift CI | Implemented (tested) |
 | FR-014 atomic activation and revocation | ADR-0003, ADR-0005 | `src/snapshot.rs`, `src/main.rs`, `src/dynamic_mcp.rs` | snapshot unit tests, `tests/reload_smoke.py` | Implemented (Unix, pre-alpha static inventory); live adapter cancellation and secure deployment pending |
-| FR-015 lock/fuzz/MCP matrix | ADR-0003, ADR-0009 | `Cargo.lock`, upcoming fuzz/protocol harness | CI and conformance suite | In progress |
+| FR-015 lock/fuzz/MCP matrix | ADR-0003, ADR-0009 | `Cargo.lock`, `tests/parser_mutation.rs`, `fuzz/` | locked CI, deterministic mutation test, pinned nightly fuzz smoke, legacy + modern stdio tests | Implemented (M1 coverage; live HTTP and security assessment deferred) |
 
 ## ADR implementation matrix
 
@@ -47,6 +47,13 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 - `src/schema.rs` generates the schema from Rust resource models; CI performs a byte-for-byte drift comparison.
 - `tests/schema_conformance.py` independently checks the schema and positive/negative YAML fixtures using pinned external Python validation libraries. Passing schema validation is **not** authorization.
 - The application has a committed `Cargo.lock`. CI uses `cargo --locked` for metadata, build, Clippy and tests to detect dependency-resolution drift.
+
+## Parser fuzzing and protocol coverage (M1)
+
+- `tests/parser_mutation.rs` executes 1,800 reproducibly seeded YAML mutations through the strict parser and compiler on stable CI; any panic fails the test.
+- `fuzz/fuzz_targets/yaml_manifest.rs` adds a true libFuzzer target and seed corpus with independent dependencies. CI runs a bounded 512-case coverage-guided smoke and `.github/workflows/fuzz.yml` provides scheduled/manual 60-second campaigns using a pinned nightly compiler.
+- `tests/mcp_smoke.py` tests the legacy `2025-11-25` initialize path, while `tests/mcp_modern_smoke.py` exercises `2026-07-28` stateless `server/discover` without initialization, per-request protocol metadata, restricted tool listings and denial outcomes.
+- These are **implemented test coverage**, not formal certification. Fuzzing is probabilistic, and HTTP, OAuth, and server-initiated features are out of scope for the current stdio-only implementation.
 
 ## CI acceptance rules
 

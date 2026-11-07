@@ -48,6 +48,14 @@ The checked-in `schemas/v1alpha1/resources.schema.json` is compared against the 
 - No public CI job requires private network access, personal inventory, or production credentials.
 - CI status must distinguish tests run from tests proposed; failures are not waived by documentation claims.
 
+## Implemented parser fuzz and MCP protocol regression tests
+
+- `tests/parser_mutation.rs`: 1,800 seeded edits of valid YAML manifests, stable CI, panic/crash regression.
+- `fuzz/fuzz_targets/yaml_manifest.rs`: actual libFuzzer target for parser and compiler, with a small public seed corpus. Pull-request CI compiles and runs the target for 512 executions using a pinned nightly toolchain; separate scheduled/manual workflow runs a 60-second campaign.
+- `tests/mcp_smoke.py` plus `tests/mcp_modern_smoke.py`: legacy initialize versus 2026 stateless discover and metadata, with authorized/denied calls and private catalog hints.
+
+A green bounded fuzz run is useful regression evidence but **not** exhaustive security validation; reproduce findings and add minimized corpus cases and deterministic regression tests.
+
 ## Release-blocking failures
 
 Block publication when authorization is bypassed; a policy-negative call reaches a live adapter; credentials leak; a client can substitute a target; an observe operation performs an unintended mutation; an audit-mandatory invocation executes without its required audit commitment; or a plugin escapes its granted isolation.

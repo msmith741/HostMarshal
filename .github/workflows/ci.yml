@@ -41,3 +41,17 @@ jobs:
           python3 tests/mcp_smoke.py
           python3 tests/declarative_smoke.py
           python3 tests/reload_smoke.py
+          python3 tests/mcp_modern_smoke.py
+
+  fuzz-smoke:
+    name: Coverage-guided fuzz target smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned nightly compiler
+        run: rustup toolchain install nightly-2026-11-06 --profile minimal
+      - name: Install pinned cargo-fuzz
+        run: cargo +nightly-2026-11-06 install cargo-fuzz --locked --version 0.13.2
+      - name: Build and run bounded fuzz target
+        run: cargo +nightly-2026-11-06 fuzz run yaml_manifest -- -runs=512 -timeout=5 -max_len=8192
