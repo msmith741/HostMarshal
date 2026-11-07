@@ -697,8 +697,11 @@ mod tests {
         let _occupancy = runtime.capacity.try_acquire_many(16).unwrap();
         assert_eq!(
             runtime
-                .invoke(&caller("example-operator"), "inventory.inspect",
-                    json!({"target": "sample-linux"}))
+                .invoke(
+                    &caller("example-operator"),
+                    "inventory.inspect",
+                    json!({"target": "sample-linux"})
+                )
                 .await
                 .unwrap_err(),
             RuntimeFailure::Busy
@@ -717,8 +720,11 @@ mod tests {
         runtime.store.lockdown().unwrap();
         assert_eq!(
             runtime
-                .invoke(&caller("example-operator"), "inventory.inspect",
-                    json!({"target": "sample-linux"}))
+                .invoke(
+                    &caller("example-operator"),
+                    "inventory.inspect",
+                    json!({"target": "sample-linux"})
+                )
                 .await
                 .unwrap_err(),
             RuntimeFailure::Unauthorized
