@@ -37,10 +37,10 @@ fn mutated_valid_yaml_never_panics() {
                 }
             }
         }
-        if let Ok(text) = std::str::from_utf8(&bytes) {
-            if let Ok(resources) = parse_manifests(text) {
-                let _ = CompiledConfig::compile(resources);
-            }
+        if let Ok(text) = std::str::from_utf8(&bytes)
+            && let Ok(resources) = parse_manifests(text)
+        {
+            let _ = CompiledConfig::compile(resources);
         }
     }
 }
