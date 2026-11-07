@@ -8,8 +8,8 @@ use std::{
 
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 const MAX_FILE_BYTES: u64 = 128 * 1024;
 const MAX_FILES: usize = 128;
@@ -57,21 +57,27 @@ pub struct CapabilitySpec {
     pub limits: Limits,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, rmcp::schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, rmcp::schemars::JsonSchema,
+)]
 #[serde(deny_unknown_fields)]
 pub struct Subject {
     pub issuer: String,
     pub subject: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, rmcp::schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, rmcp::schemars::JsonSchema,
+)]
 #[serde(deny_unknown_fields)]
 pub struct Targets {
     pub kind: String,
     pub names: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, rmcp::schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, rmcp::schemars::JsonSchema,
+)]
 #[serde(deny_unknown_fields)]
 pub struct GrantSpec {
     pub subjects: Vec<Subject>,
@@ -339,13 +345,8 @@ impl CompiledConfig {
             grant.targets.names.sort();
         }
         grants.sort();
-        let canonical = serde_json::to_vec(&(
-            API_VERSION,
-            OPERATION,
-            &hosts,
-            &capabilities,
-            &grants,
-        ))?;
+        let canonical =
+            serde_json::to_vec(&(API_VERSION, OPERATION, &hosts, &capabilities, &grants))?;
         let mut hash = Sha256::new();
         hash.update(b"hostmarshal-snapshot-v1\0");
         hash.update(canonical);
@@ -520,7 +521,6 @@ spec: {address: alpha.example.invalid}
         assert!(serde_saphyr::from_multiple::<Resource>(duplicate_key).is_err());
     }
 
-
     #[test]
     fn snapshot_digest_is_stable_and_changes_with_authorization() {
         let yaml = fixture();
@@ -545,7 +545,11 @@ spec: {address: alpha.example.invalid}
         assert!(parse_manifests("data: &anchor value\n").is_err());
         assert!(parse_manifests("data: !unexpected value\n").is_err());
         assert!(parse_manifests("data: { <<: {x: 1} }\n").is_err());
-        let deep = format!("data: {}x{}", "[".repeat(MAX_DEPTH + 2), "]".repeat(MAX_DEPTH + 2));
+        let deep = format!(
+            "data: {}x{}",
+            "[".repeat(MAX_DEPTH + 2),
+            "]".repeat(MAX_DEPTH + 2)
+        );
         assert!(parse_manifests(&deep).is_err());
     }
 
