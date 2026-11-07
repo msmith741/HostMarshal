@@ -14,7 +14,9 @@ use crate::{
 use anyhow::bail;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
+#[cfg(test)]
+use serde_json::json;
 use sha2::{Digest, Sha256};
 
 const MAX_FILE_BYTES: u64 = 128 * 1024;

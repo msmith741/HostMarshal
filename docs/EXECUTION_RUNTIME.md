@@ -1,6 +1,6 @@
 # M2 — Security-enforcing execution runtime
 
-**Status:** Implemented for the pre-alpha, **static-inventory-only** declarative MCP server. This is an architectural security foundation, not authorization to execute infrastructure-changing commands.
+**Status:** M2 central runtime implemented, now used by the M3 built-in SSH/HTTPS observations as well as static inventory. This is an architectural security foundation, not authorization to execute infrastructure-changing commands.
 
 ## Architecture and trust boundary
 
@@ -34,7 +34,7 @@ The MCP layer **does not call adapters, read credential providers, or evaluate p
 | `AuditEvent`, `AuditSink` | `src/audit.rs` | Redacted, reason-coded audit of accepted, denied, succeeded and failed requests |
 | `ExecutionCoordinator` | `src/runtime.rs` | Centralizes order, limits, broker, adapter, output and audit |
 
-The initial trusted `builtin.inventory.inspect/v1` descriptor allows **Observe** on a `Host`, has a 2-second deadline, and a 4096-byte output ceiling. Capability YAML may only further narrow permitted limits. A global admission semaphore bounds concurrency (16 in M2); per-operation quotas, rate limiting and administrative approvals remain later work.
+Trusted built-ins include `builtin.inventory.inspect/v1` (2-second max) plus `builtin.linux.uname/v1` and `builtin.https.health/v1` (5-second maximum each). All are Observe-only with a 4096-byte descriptor ceiling. The user's validated YAML capability may further reduce these limits. The runtime validates each operation's schema and output separately. Capability YAML may only further narrow permitted limits. A global admission semaphore bounds concurrency (16 in M2); per-operation quotas, rate limiting and administrative approvals remain later work.
 
 ## Security invariants
 
@@ -61,6 +61,6 @@ Rust tests cover authorized success, denied caller/target/tool/arguments, emerge
 
 ## Deliberate limitations
 
-This release has **no live infrastructure adapters** and no real secret backend. The production `DenyCredentialBroker` refuses all credential requests; successful scoped leases are test-only. The project does **not** yet implement remote identity federation, plugin process sandboxing, approval workflows, reauthorization at side-effect boundaries, durable remote audit, tamper evidence, or multiple independent tenants. The local launcher and protected configuration directory remain deployment trust assumptions. Do not advertise this M2 runtime as a production remote-admin gateway.
+M3 provides two fixed **live read-only** transports: Linux uname over pinned-key SSH and TLS-validated HTTPS health. The default `DenyCredentialBroker` still denies all SSH requests unless the trusted local launcher loads a protected per-target `LocalSshKeyBroker` mapping. No remote/renewable secret backend is implemented. The project does **not** yet implement remote identity federation, plugin process sandboxing, approval workflows, reauthorization at side-effect boundaries, durable remote audit, tamper evidence, or multiple independent tenants. The local launcher and protected configuration directory remain deployment trust assumptions. Do not advertise this M2 runtime as a production remote-admin gateway.
 
 See [Audit](AUDIT.md), [Security](SECURITY_ARCHITECTURE.md), [Adapters](ADAPTERS.md), and [Traceability](TRACEABILITY.md).

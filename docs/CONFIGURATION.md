@@ -1,6 +1,6 @@
 # Declarative configuration specification
 
-**Status:** limited M1 YAML loader, CLI validation/inspection, generated JSON Schema export, and deterministic effective snapshot digest exist in pre-alpha. Full specification remains a target design; schema narrowing, durable audit, and lifecycle authorization are not implemented. Unix signal reload with atomic activation and emergency deny is available for the local stdio mode; secure staging of directory trees remains an operator responsibility. Versioned checked-in schema and external conformance checks are available.
+**Status:** M1 YAML loader/schema/digest plus M3 typed `ssh` and `https` Host transport settings are implemented in pre-alpha. Full specification remains a target design; schema narrowing, durable audit, and lifecycle authorization are not implemented. Unix signal reload with atomic activation and emergency deny is available for the local stdio mode; secure staging of directory trees remains an operator responsibility. Versioned checked-in schema and external conformance checks are available.
 
 ## Goals and resources
 
@@ -79,6 +79,8 @@ hostmarshal config render ./config
 hostmarshal capabilities list
 hostmarshal policy explain --subject example-operator --capability inventory.inspect --target sample-linux
 ~~~
+
+M3 `Host.spec.ssh` accepts only `user`, `port` and absolute `knownHostsFile`; `Host.spec.https` accepts `port` and optional absolute `caCertificateFile`. The Host address must be a valid DNS name or IP address when these transports are used; no scheme, path or URL is allowed. The M3 runtime uses fixed SSH command and HTTPS /health path, never tool-provided URLs or commands. The protected SSH key mapping is a **separate launcher-supplied JSON file**, never a capability or grant YAML field. See [M3 observation operations](OBSERVATION_ADAPTERS.md).
 
 The schema export is derived from the Rust resource types and is structural. Semantic validation of trusted operation IDs, cross-references, schema equality, and authorization still happens in trusted code. The SHA-256 digest is computed over the normalized **effective** snapshot and is not a signature or proof of source/binary integrity. The parser rejects anchors, aliases, merges and custom tags and applies explicit resource budgets. TOCTOU file-replacement risks remain for later secure deployment hardening.
 

@@ -2,9 +2,9 @@
 
 **Secure infrastructure operations through declarative capabilities and policy-controlled execution.**
 
-HostMarshal is a vendor-neutral, pre-alpha Rust infrastructure capability gateway. It supports MCP over stdio, versioned YAML capabilities, and a centralized M2 authorization/audit execution coordinator for static inventory observations.
+HostMarshal is a vendor-neutral, pre-alpha Rust infrastructure capability gateway. It supports MCP over stdio, versioned YAML capabilities, and a centralized audited execution coordinator for vetted inventory, Linux SSH and HTTPS observations.
 
-> **Pre-alpha.** Only static inventory observation is permitted. HostMarshal does **not** connect to hosts, execute commands, load plugins, authenticate remote clients or issue real credentials. Stderr/optional local file audit exists, but no independent tamper-evident audit service or production security guarantees.
+> **Pre-alpha.** M3 adds fixed Linux `uname -s` over pinned-host-key SSH and a fixed HTTPS `/health` GET. There is **no** generic remote command, arbitrary URL, mutation, external plugin, remote MCP authentication, short-lived secret issuance or tamper-evident audit. Use a dedicated minimally privileged OS/SSH identity and trusted configuration.
 
 ## Declarative M1 configuration + M2 execution runtime
 
@@ -41,11 +41,11 @@ A successful reload applies changed grants to newly starting calls; already-star
 
 This does not provide cryptographic caller authentication, durable audit, atomic on-disk configuration deployment, or cancellation/revocation guarantees for future live adapters. See [Security Architecture](docs/SECURITY_ARCHITECTURE.md).
 
-## M2 audited execution (static observation only)
+## M2 security runtime and M3 observation transports
 
-Every published MCP `tools/call` goes through the central [execution runtime](docs/EXECUTION_RUNTIME.md): verified trusted-launcher identity, exact operation/target grant, mandatory pre-execution audit, optional scoped credential request, bounded built-in adapter, output verification and terminal audit. The production broker denies any credential request. **No live adapters are available.**
+Every published MCP `tools/call` goes through the central [execution runtime](docs/EXECUTION_RUNTIME.md): trusted-launcher identity, exact operation/target grant, mandatory pre-execution audit, scoped credential request where required, bounded built-in adapter, output verification and terminal audit. M3 adds two vetted live observations: `builtin.linux.uname/v1` using pinned-host-key OpenSSH with a protected target-specific key mapping, and `builtin.https.health/v1` using certificate-validating HTTPS with a fixed health URL. Without a trusted `--ssh-credential-map`, SSH requests fail closed.
 
-Structured audit events go to stderr by default; for a local synchronized JSONL file, run from a trusted launcher with `--audit-log /protected/audit/events.jsonl` (outside the YAML directory). See [Audit](docs/AUDIT.md) for permissions, log retention and limitations.
+Structured audit events go to stderr by default; for a local synchronized JSONL file, run from a trusted launcher with `--audit-log /protected/audit/events.jsonl` (outside the YAML directory). See [Audit](docs/AUDIT.md) for permissions, log retention and limitations. For transport setup and restrictions see [M3 observation adapters](docs/OBSERVATION_ADAPTERS.md) and [portable example](examples/m3-observations/README.md).
 
 ## Parser fuzzing and MCP compatibility
 
@@ -61,7 +61,7 @@ The old unaudited `--config` JSON mode and its hard-coded `list_hosts`/`get_host
 
 - [Product requirements](docs/PRODUCT.md), [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md)
 - [Configuration](docs/CONFIGURATION.md), [Capabilities](docs/CAPABILITIES.md), [Adapters](docs/ADAPTERS.md)
-- [Security architecture](docs/SECURITY_ARCHITECTURE.md), [Execution runtime](docs/EXECUTION_RUNTIME.md), [Audit](docs/AUDIT.md), [Coding standards](docs/CODING_STANDARDS.md)
+- [Security architecture](docs/SECURITY_ARCHITECTURE.md), [Execution runtime](docs/EXECUTION_RUNTIME.md), [M3 observations](docs/OBSERVATION_ADAPTERS.md), [Audit](docs/AUDIT.md), [Coding standards](docs/CODING_STANDARDS.md)
 - [Traceability matrix](docs/TRACEABILITY.md), [Machine-readable schemas](docs/SCHEMA_EXPORT.md), [ADRs](docs/adr/README.md)
 - [Test strategy](docs/TEST_STRATEGY.md), [Contributing](CONTRIBUTING.md), [Security policy](SECURITY.md)
 
@@ -77,6 +77,7 @@ python3 tests/declarative_smoke.py
 python3 tests/reload_smoke.py  # Unix only
 python3 tests/mcp_modern_smoke.py  # MCP 2026-07-28 stateless
 python3 tests/audit_smoke.py  # audited stdio execution and denial
+python3 tests/transport_smoke.py  # disposable sshd and TLS target (requires CI prerequisites)
 # Additional schema drift and independent validation run in CI
 ~~~
 

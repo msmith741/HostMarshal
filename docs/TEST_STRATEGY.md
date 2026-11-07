@@ -64,6 +64,12 @@ A green bounded fuzz run is useful regression evidence but **not** exhaustive se
 - Tests should treat error messages as non-disclosing public contracts and audit records as structured privileged diagnostics, not remote telemetry.
 - For future live providers/operations, expand with crash recovery, credential expiry/revocation, sandbox escape, rate-limit, TLS/SSH trust, durable audit, sensitive-output classification and side-effect cancellation tests before enabling them.
 
+## M3 disposable real-target security suite
+
+`tests/transport_smoke.py` provisions an ephemeral OpenSSH server with an unprivileged observer account and transient keys, and a locally CA-signed TLS health server. It verifies authorized fixed Linux identification, pinned-key replacement denial, no unmapped or unsafe SSH key use, fixed output and argument injection denial, correct TLS trust, alternate CA failure, HTTP redirect non-follow, slow response deadline, no body disclosure and audit absence of credentials. The CI workflow installs the disposable `openssh-server` prerequisite. All tests run without access to a maintainer's infrastructure.
+
+Unit tests enforce network-hostname validation, typed operation allowlist and grant/transport matching. The schema conformance suite verifies regenerated M3 transport structure and rejects executable configuration fields.
+
 ## Release-blocking failures
 
 Block publication when authorization is bypassed; a policy-negative call reaches a live adapter; credentials leak; a client can substitute a target; an observe operation performs an unintended mutation; an audit-mandatory invocation executes without its required audit commitment; or a plugin escapes its granted isolation.

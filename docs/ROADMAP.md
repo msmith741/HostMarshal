@@ -38,7 +38,9 @@
 - Constrained HTTP API observation with approved endpoints, TLS, method/redirect/response restrictions.
 - Integration suites using disposable VMs/containers and mock API services.
 
-**Gate:** no unrestricted command tool; no credentials in output; denial, target-swap, SSRF and timeout tests pass; real read-only targets can be inspected with least privilege.
+**M3 implementation:** the vetted `builtin.linux.uname/v1` and `builtin.https.health/v1` operations are compiled into the trusted catalog, with explicit Host transport fields, strict schema equality, broker/adapter deadlines and auditable invocation. Linux observation uses OpenSSH with a verified pinned host key and protected per-target local key mapping; HTTPS uses Rustls, a fixed GET /health, strict TLS certificate validation, optional CA trust, and no proxy, redirect or response body exposure. CI runs disposable non-privileged SSH and locally signed TLS services with denial, key/cert mismatch, target substitution, injection, redirect and deadline tests. See [M3 deployment](OBSERVATION_ADAPTERS.md) and [ADR-0011](adr/0011-readonly-network-observation.md).
+
+**Gate:** no unrestricted command tool; no credentials in output; denial, target-swap, client-controlled-URL/SSRF and timeout tests pass; real read-only targets can be inspected with least privilege. **Boundaries:** this proves the M3 approved operation subset only; neither transport grants mutation rights, guarantees remote cancellation, nor implements a remote identities/secrets service.
 
 ## M4 — Credential providers and remote transports
 

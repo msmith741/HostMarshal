@@ -1,6 +1,6 @@
 # Capability and operation model
 
-**Status:** M1 pre-alpha has a dynamic catalog backed by one compiled-in trusted inventory operation; full adapter and registry lifecycle is still proposed. Legacy JSON mode retains the two hard-coded tools.
+**Status:** M3 pre-alpha exposes a dynamic catalog backed by three trusted built-in operations (inventory.inspect, Linux uname, HTTPS health). The old unaudited JSON handler was retired in M2. Public plugin registry lifecycle remains proposed.
 
 ## Three separate objects
 
@@ -41,7 +41,7 @@ The descriptor is supplied by a trusted built-in adapter or approved plugin pack
 - **Privileged:** administrative changes; elevated controls and auditing.
 - **Destructive:** high-impact state removal; strict additional approval and blast-radius checks.
 
-Only **Observe** on vetted mock/inventory operations is in the initial scope. Treat unverified operations as higher risk rather than trusting manifest metadata.
+Only **Observe** on vetted inventory, fixed Linux uname and HTTPS health operations is supported. Treat unverified operations as higher risk rather than trusting manifest metadata.
 
 ## Initial interface and validation
 

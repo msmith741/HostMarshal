@@ -1,0 +1,20 @@
+apiVersion: hostmarshal.io/v1alpha1
+kind: Host
+metadata:
+  name: demo-linux
+spec:
+  address: demo-linux.example.invalid
+  ssh:
+    user: observer
+    port: 22
+    knownHostsFile: /etc/hostmarshal/trust/known_hosts
+---
+apiVersion: hostmarshal.io/v1alpha1
+kind: Host
+metadata:
+  name: demo-https
+spec:
+  address: status.example.invalid
+  https:
+    port: 443
+    caCertificateFile: /etc/hostmarshal/trust/ca.pem

@@ -1,6 +1,6 @@
 # Audit events and operational guidance
 
-**Status:** M2 implements structured audit events for the declarative stdio execution runtime. An audit event is evidence of what the process attempted and recorded; local files are **not** tamper-evident.
+**Status:** M2 implements structured audit events for the declarative stdio execution runtime; M3 network observations use the same preexecution and terminal auditing, without returning raw network responses or private-key data. An audit event is evidence of what the process attempted and recorded; local files are **not** tamper-evident.
 
 ## Event lifecycle
 

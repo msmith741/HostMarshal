@@ -1,6 +1,6 @@
 # Security policy
 
-**Status:** no supported production release. Design documents and examples are not security guarantees. The declarative M2 runtime supports audited static-inventory observations, but no real credential backend, remote authentication, or tamper-evident audit. The old unaudited JSON handlers were retired.
+**Status:** no supported production release. Design documents and examples are not security guarantees. The M3 runtime supports audited inventory plus fixed SSH/HTTPS observations with a protected local key-path broker; it still has no remote client authentication, remote/short-lived credential provider, arbitrary command execution, mutation, or tamper-evident audit. The old unaudited JSON handlers were retired.
 
 ## Reporting vulnerabilities
 

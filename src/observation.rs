@@ -103,7 +103,7 @@ impl OperationAdapter for LinuxUname {
                 .kill_on_drop(true);
 
             let mut child = command.spawn().map_err(|_| AdapterFailure::Unavailable)?;
-            let mut stdout = child.stdout.take().ok_or(AdapterFailure::Failed)?;
+            let stdout = child.stdout.take().ok_or(AdapterFailure::Failed)?;
             let mut data = Vec::with_capacity(32);
             // Bound malicious/unexpected server output BEFORE waiting on the child.
             stdout

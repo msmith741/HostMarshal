@@ -1,0 +1,9 @@
+{
+  "apiVersion": "hostmarshal.io/ssh-credentials/v1alpha1",
+  "identities": [
+    {
+      "target": "demo-linux",
+      "identityFile": "/var/lib/hostmarshal/keys/demo-linux"
+    }
+  ]
+}

@@ -33,6 +33,8 @@ HostMarshal provides **typed, authorized, auditable infrastructure operations** 
 | FR-013 | Publish versioned config schemas with independent conformance and drift checks | M1 |
 | FR-014 | Atomically activate validated snapshots and define emergency revocation semantics | M1 |
 | FR-015 | Lock application dependencies and exercise parser fuzzing and supported MCP eras | M1 |
+| FR-016 | Enforce pinned SSH host identity, dedicated target-scoped key access, fixed Linux observation and bounded output | M3 |
+| FR-017 | Enforce approved HTTPS-only health probes, validated TLS identity, no redirects/proxies or untrusted response-body exposure | M3 |
 
 ## Non-functional requirements
 

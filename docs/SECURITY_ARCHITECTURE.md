@@ -1,6 +1,6 @@
 # Security architecture and threat model
 
-**Status:** security architecture spans implemented M1/M2 static-observation controls and further **unimplemented** privileged/remote security requirements. Do not infer production assurance from this document. For disclosure see [SECURITY.md](../SECURITY.md).
+**Status:** security architecture covers M1/M2 enforcement and M3 vetted SSH/HTTPS observation controls, alongside **unimplemented** privileged/remote transport security requirements. Do not infer production assurance from this document. For disclosure see [SECURITY.md](../SECURITY.md).
 
 ## Assets and adversaries
 
@@ -87,7 +87,7 @@ The declarative stdio MCP handler now delegates all tool invocations to `Executi
 
 For each invocation, the audit sink must accept `Authorized` *before* credential access/operation execution; failures deny execution. The sink records denied and terminal outcomes with correlation IDs, operation and snapshot digests. Default stderr and optional protected local JSONL/sync-data backends are available, but the latter is **not tamper-evident** and has OS file-replacement risks. Terminal audit failure can only suppress the response, not undo an effect, which is why no mutation is permitted. See [Audit](AUDIT.md).
 
-A `CredentialBroker` interface accepts exact operation/target/purpose scopes. The production broker refuses all requests and no real credential providers are available. External plugins, remote authentication, approvals, cancellation guarantees for privileged work and real host adapters are explicitly absent.
+A `CredentialBroker` interface accepts exact operation/target/purpose scopes. Without an explicit protected local SSH identity mapping, the broker denies credential requests. M3's minimal local key-path broker allows only `builtin.linux.uname/v1` for mapped targets with purpose `ssh-observe`. Real external/short-lived secret provider integration remains M4. See [M3 security design](OBSERVATION_ADAPTERS.md). External plugins, remote authentication, approvals, cancellation guarantees for privileged work and real host adapters are explicitly absent.
 
 ## Residual risks
 
