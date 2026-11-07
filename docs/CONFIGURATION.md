@@ -1,6 +1,6 @@
 # Declarative configuration specification
 
-**Status: PROPOSED.** No versioned YAML loader, schema registry, or reload API has been implemented. The examples below are design fixtures, not deployable configuration.
+**Status:** M1 limited YAML loader and local CLI validation implemented in pre-alpha; **the full specification remains a target design**. Supported fixture subset is in `config/v1alpha1/`. Published schemas, schema narrowing, canonical snapshot digest, secure reload, and lifecycle authorization are not implemented.
 
 ## Goals and resources
 
@@ -38,7 +38,7 @@ Configurations are **privileged deployment inputs**. Loading files from a Git wo
 6. Compile to an immutable complete registry/policy snapshot. Record a canonical digest and source provenance.
 7. Activate atomically only after full validation. Failed reload retains the previous valid snapshot **except** urgent revocations, which need a separate deny-first control plane.
 
-Never honor dynamic schema references to untrusted external URLs. Limit schema depth and validation cost; be explicit about JSON Schema Draft 2020-12 support and backward compatibility.
+M1 accepts schemas only when structurally identical to the trusted builtin operation descriptor; runtime-defined `$ref`/arbitrary schemas are not supported. Never honor dynamic schema references to untrusted external URLs. Limit schema depth and validation cost; be explicit about JSON Schema Draft 2020-12 support and backward compatibility.
 
 ## Resource design (proposed)
 
@@ -67,7 +67,7 @@ Never honor dynamic schema references to untrusted external URLs. Limit schema d
 
 ## CLI and failure behavior
 
-Proposed commands (none implemented yet):
+CLI design (only `config validate` currently implemented):
 
 ~~~sh
 hostmarshal config validate ./config

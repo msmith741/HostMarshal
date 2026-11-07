@@ -1,6 +1,6 @@
 # Capability and operation model
 
-**Status: PROPOSED.** This is the central extensibility contract; the current bootstrap implementation instead hard-codes two MCP methods.
+**Status:** M1 pre-alpha has a dynamic catalog backed by one compiled-in trusted inventory operation; full adapter and registry lifecycle is still proposed. Legacy JSON mode retains the two hard-coded tools.
 
 ## Three separate objects
 
@@ -53,7 +53,7 @@ An invocation is bound to **capability name + immutable operation identity/diges
 
 ### Tier 1 — declarative binding (M1)
 
-YAML binds installed operation descriptors and constrains schemas, target selectors and budgets. No arbitrary interpreter and no custom executable paths.
+YAML binds installed operation descriptors and constrains target selections and budgets. **In the initial subset, schemas must exactly equal the trusted descriptor's schemas**; validated schema narrowing is later work. No arbitrary interpreter and no custom executable paths.
 
 ### Tier 2 — restricted recipes (M5, optional)
 

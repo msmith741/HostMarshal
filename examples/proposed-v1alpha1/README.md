@@ -1,6 +1,6 @@
 # Proposed HostMarshal configuration examples
 
-**These files are DESIGN FIXTURES ONLY.** There is **no currently implemented loader** for the `hostmarshal.io/v1alpha1` resources or dynamic capability registry. Do not pass these files to the bootstrap binary; it expects an unrelated JSON schema.
+**These remain illustrative design fixtures**, potentially broader than the deliberately strict M1 subset. For a presently supported pre-alpha YAML configuration, use [config/v1alpha1](../../config/v1alpha1) and `hostmarshal config validate config/v1alpha1`. The legacy bootstrap JSON mode remains separate.
 
 Files:
 

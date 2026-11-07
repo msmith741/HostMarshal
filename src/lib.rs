@@ -1,6 +1,8 @@
-//! HostMarshal read-only inventory and authorization core.
-//! This version does not execute host commands or authenticate remote clients.
+//! HostMarshal capability core and MCP interfaces.
+//! Live host access is deliberately not implemented in pre-alpha.
 pub mod config;
+pub mod declarative;
+pub mod dynamic_mcp;
 pub mod policy;
 
 use std::sync::Arc;
@@ -21,6 +23,7 @@ struct GetHostArgs {
     host_id: String,
 }
 
+/// Legacy pre-alpha JSON mode, available temporarily for migration.
 #[derive(Clone)]
 pub struct HostMarshal {
     policy: Arc<Policy>,

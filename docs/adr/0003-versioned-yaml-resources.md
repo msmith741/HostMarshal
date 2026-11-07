@@ -1,8 +1,8 @@
 # ADR-0003: Versioned declarative configuration resources
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-07
-- **Deciders:** Maintainers (pending review)
+- **Deciders:** Project maintainer (design review, 2026-11-07)
 
 ## Context
 
@@ -11,6 +11,12 @@ JSON-only bootstrap configuration cannot easily express independent inventory, c
 ## Decision
 
 Use versioned, strictly validated YAML resources with `apiVersion`, `kind`, `metadata` and `spec`. Publish machine-readable schemas. Parse under resource budgets; reject duplicate keys, unsupported tags/versions, invalid references, unknown security-sensitive fields, unsafe schemas and privilege-widening manifest settings. Compile a **complete immutable snapshot**, then activate atomically. Configuration paths are privileged deployment material.
+
+## Acceptance clarifications
+
+- M1 is an intentionally restricted implementation subset. Only explicitly supported `Host`, `Capability`, and `Grant` resources are accepted; schema publication, canonical digests, secure hot reload, and privileged deployment workflows remain separately gated work.
+- A trusted process launcher owns configuration inputs. A successful parse does not authenticate the author of the files. Process/OS permissions are part of the trusted deployment boundary.
+- A parser must never partially activate resources on error. Parser budgets, duplicate-key rejection, and adversarial YAML fuzzing are release requirements; merely choosing a YAML library does not prove all these controls.
 
 ## Alternatives considered
 
