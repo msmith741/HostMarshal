@@ -20,12 +20,6 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Bootstrap updated lockfile for signal feature
-        run: |
-          cargo generate-lockfile
-          echo 'LOCK_BEGIN'
-          base64 -w0 Cargo.lock | fold -w 120 | sed 's/^/LOCK64 /'
-          echo 'LOCK_END'
       - name: Enforce locked dependency resolution
         run: cargo metadata --locked --format-version 1 > /dev/null
       - name: Check formatting
