@@ -14,7 +14,7 @@ MCP call -> ExecutionCoordinator
   -> trusted OperationDescriptor (intrinsic Observe-only constraint)
   -> admission semaphore
   -> AuditSink pre-execution commitment [failure => no adapter]
-  -> scoped CredentialBroker request [only if descriptor requires it]
+  -> asynchronous, deadline-bound scoped CredentialBroker [only if required]
   -> bounded async OperationAdapter execution
   -> exact output shape, target binding, byte-limit validation
   -> AuditSink terminal outcome [failure => no client output]
@@ -41,8 +41,8 @@ The initial trusted `builtin.inventory.inspect/v1` descriptor allows **Observe**
 1. Missing/invalid caller, missing capability grant or unauthorized target => **deny before broker and adapter access**.
 2. Unrecognized adapter or operation descriptor risk, schema or target mismatch => deny, regardless of a YAML description.
 3. Failure to commit `Authorized` audit event => **no credential acquisition and no execution**.
-4. Credentialless operations never call the broker; credentialed operation scopes are checked for **exact match** (operation/target/purpose), with no fallback.
-5. Adapter futures are bounded by `tokio::time::timeout`; a timeout drops/cancels the future. This is cooperative cancellation, **not** an OS kill/sandbox guarantee.
+4. Credentialless operations never call the broker; credentialed operation scopes are checked for **exact match** (operation/target/purpose), with no fallback. The asynchronous broker and adapter share one absolute operation deadline.
+5. Broker and adapter futures share a `tokio::time::timeout_at` deadline; a timeout drops/cancels the future. This is cooperative cancellation, **not** an OS kill/sandbox guarantee.
 6. Static inventory output must exactly match trusted resolved inventory and fit the configured byte ceiling. Invalid or secret-bearing results are suppressed.
 7. Completion audit failure suppresses the response. This **cannot roll back a previously completed operation**; therefore mutation remains explicitly prohibited.
 8. Reload/revocation applies to requests beginning after an atomic snapshot swap; already-started static observations may complete on their previous immutable snapshot.
@@ -53,7 +53,7 @@ The coordinator exposes stable `RuntimeFailure` variants: `Unauthorized`, `Inval
 
 ## M2 verification
 
-Rust tests cover authorized success, denied caller/target/tool/arguments, broker-not-called on denial, broker outages and mismatched scope, audit-start failure before execution, adapter failure, output tampering, timeouts, and terminal-audit failure. `tests/audit_smoke.py` drives the real MCP process using a protected JSONL file and checks request correlation, authorization, denial, secret redaction and file mode. All earlier schema, reload and dual-MCP-era suites remain required CI checks.
+Rust tests cover authorized success, denied caller/target/tool/arguments, broker-not-called on denial, broker outages, mismatched scope and a slow broker, audit-start failure before execution, adapter failure, output tampering, timeouts, and terminal-audit failure. `tests/audit_smoke.py` drives the real MCP process using a protected JSONL file and checks request correlation, authorization, denial, secret redaction and file mode. All earlier schema, reload and dual-MCP-era suites remain required CI checks.
 
 ## Deliberate limitations
 

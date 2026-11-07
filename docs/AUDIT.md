@@ -11,7 +11,7 @@
 
 Each event carries `timestampMs`, `requestId`, `issuer`, `subject`, `capability`, `operation`, `target`, `snapshotDigest`, `phase`, and `reason`. Denied unresolved input identifiers are sanitized. Events do **not** include arbitrary tool arguments, outputs, authentication headers, credential handles, adapter errors or secret values.
 
-The pre-execution and terminal events share a request ID. A protected operation never runs if the **authorized** record cannot be committed. If a completion record cannot be committed, the runtime returns `audit unavailable` rather than the output; this cannot reverse any side effect, which is why M2 allows only static observation.
+The pre-execution and terminal events share a request ID. Current stderr/file sinks use synchronous I/O (including file synchronization), which can block on a stalled destination; use protected local storage, and do not claim bounded audit latency or support for untrusted network filesystems. Async/isolated audit providers require a separate release gate. A protected operation never runs if the **authorized** record cannot be committed. If a completion record cannot be committed, the runtime returns `audit unavailable` rather than the output; this cannot reverse any side effect, which is why M2 allows only static observation.
 
 ## Deployment
 
