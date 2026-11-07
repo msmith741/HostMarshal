@@ -1,0 +1,22 @@
+[package]
+name = "hostmarshal-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+hostmarshal = { path = ".." }
+libfuzzer-sys = "=0.4.13"
+
+[[bin]]
+name = "yaml_manifest"
+path = "fuzz_targets/yaml_manifest.rs"
+test = false
+doc = false
+bench = false
+
+# Keep fuzzer-only dependencies outside the application lockfile.
+[workspace]
