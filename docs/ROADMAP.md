@@ -14,7 +14,7 @@
 - Stable domain model, inventory and policy types; exact-target default-deny.
 - Dynamic MCP tool registration and typed schemas; offline CLI config validation and inspection.
 - Small built-in mock/inventory operation catalog, **not** general shell execution.
-- Reconcile or replace the hard-coded bootstrap PR; add checked-in `Cargo.lock`.
+- Refactor the merged hard-coded bootstrap implementation against these contracts; add checked-in `Cargo.lock`.
 
 **Gate:** adding a YAML-only capability over an existing vetted mock operation needs no Rust change; authorized calls succeed and denied calls never reach the adapter; malformed or privilege-escalating manifests fail load. Test at least one legacy and the current supported MCP version.
 

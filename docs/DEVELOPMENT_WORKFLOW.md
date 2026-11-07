@@ -39,4 +39,4 @@ For early development, the maintainer reviews the proposal and its tests. For hi
 
 ## Integration and PR #1
 
-The open [bootstrap PR #1](https://github.com/msmith741/HostMarshal/pull/1) contains a hard-coded tool prototype. Do not merge it unchanged into a declarative architecture. Reconcile/rework that PR (or replace it) after M0 design acceptance; preserve useful test fixtures and MCP initialization coverage, update references, and keep this documentation authoritative.
+Merged [bootstrap PR #1](https://github.com/msmith741/HostMarshal/pull/1) contains a hard-coded tool prototype. It remains pre-alpha and is not the declarative architecture. Refactor it after M0 design acceptance; preserve useful test fixtures and MCP initialization coverage, update references, and keep the proposed architecture documents authoritative after review.

@@ -92,4 +92,4 @@ See [Capabilities](CAPABILITIES.md), [Adapters](ADAPTERS.md), [Configuration](CO
 
 ## Current bootstrap comparison
 
-[PR #1](https://github.com/msmith741/HostMarshal/pull/1) demonstrates a basic Rust MCP server with two hard-coded tools, JSON-only static configuration and a launcher-asserted principal. It is a **prototype**, not an implementation of the YAML registry, authentication, plugins, auditing, or the architecture here. It must be reconciled before merge.
+Merged [PR #1](https://github.com/msmith741/HostMarshal/pull/1) demonstrates a basic Rust MCP server with two hard-coded tools, JSON-only static configuration and a launcher-asserted principal. It is a **prototype**, not an implementation of the YAML registry, authentication, plugins, auditing, or the architecture here. The implementation must be refactored against the approved architecture before adding real infrastructure integrations.

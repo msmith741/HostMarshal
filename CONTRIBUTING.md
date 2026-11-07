@@ -21,7 +21,7 @@ Thanks for helping build a secure and general-purpose infrastructure operations 
 - New dependencies need a purpose, maintenance/security review, license compatibility, and bounded permissions.
 - Documents and ADRs must say **proposed**, **accepted**, or **superseded**; do not claim unimplemented behavior works.
 
-Development commands (when the Rust workspace is merged):
+Development commands (for the current Rust crate and eventual workspace):
 
 ~~~sh
 cargo fmt --all -- --check

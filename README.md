@@ -4,7 +4,7 @@
 
 HostMarshal is a proposed open-source, vendor-neutral infrastructure operations platform. It is intended to let automation clients, AI agents, and administrators invoke **typed, scoped, auditable** actions against managed systems without handing them general-purpose shell, network, or credential access.
 
-> **Project status: architecture/design phase; no production release.** The configuration examples and contracts under `docs/` and `examples/` are **proposals, not implemented interfaces**. The existing Rust proof of concept lives in [PR #1](https://github.com/msmith741/HostMarshal/pull/1) and is not the approved architecture. Do not deploy the proof of concept as an infrastructure security boundary.
+> **Project status: architecture/design phase; no production release.** The configuration examples and contracts under `docs/` and `examples/` are **proposals, not implemented interfaces**. The initial Rust proof of concept from [PR #1](https://github.com/msmith741/HostMarshal/pull/1) is now merged into main, but it is **not** the approved long-term architecture. Do not deploy the proof of concept as an infrastructure security boundary.
 
 ## Principles
 
