@@ -122,9 +122,10 @@ pub struct CompiledConfig {
 }
 
 fn valid_name(s: &str) -> bool {
-    !s.is_empty() && s.len() <= 128 && s.bytes().all(|c| {
-        c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_')
-    })
+    !s.is_empty()
+        && s.len() <= 128
+        && s.bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_'))
 }
 
 pub fn input_schema() -> Value {
@@ -157,9 +158,15 @@ impl CompiledConfig {
             let entry = entry.context("invalid config directory entry")?;
             let path = entry.path();
             // Never follow symlinks from the trusted configuration directory.
-            ensure!(entry.file_type()?.is_file(), "config directory must contain regular files only");
             ensure!(
-                matches!(path.extension().and_then(|ext| ext.to_str()), Some("yaml" | "yml")),
+                entry.file_type()?.is_file(),
+                "config directory must contain regular files only"
+            );
+            ensure!(
+                matches!(
+                    path.extension().and_then(|ext| ext.to_str()),
+                    Some("yaml" | "yml")
+                ),
                 "config directory contains unsupported file extension"
             );
             ensure!(
@@ -175,7 +182,10 @@ impl CompiledConfig {
         for path in files {
             let content = fs::read_to_string(&path)
                 .with_context(|| format!("cannot read {}", path.display()))?;
-            ensure!(content.len() as u64 <= MAX_FILE_BYTES, "manifest exceeds size limit");
+            ensure!(
+                content.len() as u64 <= MAX_FILE_BYTES,
+                "manifest exceeds size limit"
+            );
             let parsed: Vec<Resource> = serde_saphyr::from_multiple(&content)
                 .with_context(|| format!("invalid YAML in {}", path.display()))?;
             resources.extend(parsed);
@@ -192,46 +202,90 @@ impl CompiledConfig {
         let mut used_names = BTreeSet::new();
         for resource in resources {
             match resource {
-                Resource::Host { api_version, metadata, spec } => {
+                Resource::Host {
+                    api_version,
+                    metadata,
+                    spec,
+                } => {
                     ensure!(api_version == API_VERSION, "unsupported Host apiVersion");
                     ensure!(valid_name(&metadata.name), "invalid host name");
-                    ensure!(used_names.insert(("Host", metadata.name.clone())), "duplicate Host");
+                    ensure!(
+                        used_names.insert(("Host", metadata.name.clone())),
+                        "duplicate Host"
+                    );
                     ensure!(!spec.address.trim().is_empty(), "empty host address");
                     hosts.insert(metadata.name.clone(), HostRecord { metadata, spec });
                 }
-                Resource::Capability { api_version, metadata, spec } => {
-                    ensure!(api_version == API_VERSION, "unsupported Capability apiVersion");
+                Resource::Capability {
+                    api_version,
+                    metadata,
+                    spec,
+                } => {
+                    ensure!(
+                        api_version == API_VERSION,
+                        "unsupported Capability apiVersion"
+                    );
                     ensure!(valid_name(&metadata.name), "invalid capability name");
-                    ensure!(used_names.insert(("Capability", metadata.name.clone())), "duplicate Capability");
+                    ensure!(
+                        used_names.insert(("Capability", metadata.name.clone())),
+                        "duplicate Capability"
+                    );
                     // In the initial release, the schema MUST equal the trusted descriptor.
                     // Subtyping / arbitrary schema narrowing will require a separate review.
-                    ensure!(spec.operation_ref == OPERATION, "unknown/unapproved operationRef");
+                    ensure!(
+                        spec.operation_ref == OPERATION,
+                        "unknown/unapproved operationRef"
+                    );
                     ensure!(spec.target_kind == "Host", "unsupported target kind");
-                    ensure!(spec.input_schema == input_schema(), "input schema cannot override trusted operation");
-                    ensure!(spec.output_schema == output_schema(), "output schema cannot override trusted operation");
+                    ensure!(
+                        spec.input_schema == input_schema(),
+                        "input schema cannot override trusted operation"
+                    );
+                    ensure!(
+                        spec.output_schema == output_schema(),
+                        "output schema cannot override trusted operation"
+                    );
                     ensure!(spec.limits.timeout == "2s", "unsupported operation timeout");
-                    ensure!(spec.limits.max_output_bytes > 0 && spec.limits.max_output_bytes <= 4096,
-                        "invalid output limit");
+                    ensure!(
+                        spec.limits.max_output_bytes > 0 && spec.limits.max_output_bytes <= 4096,
+                        "invalid output limit"
+                    );
                     if spec.exposure.mcp {
-                        capabilities.insert(metadata.name.clone(), PublishedCapability {
-                            name: metadata.name,
-                            operation_ref: spec.operation_ref,
-                            input_schema: spec.input_schema,
-                            output_schema: spec.output_schema,
-                            max_output_bytes: spec.limits.max_output_bytes,
-                        });
+                        capabilities.insert(
+                            metadata.name.clone(),
+                            PublishedCapability {
+                                name: metadata.name,
+                                operation_ref: spec.operation_ref,
+                                input_schema: spec.input_schema,
+                                output_schema: spec.output_schema,
+                                max_output_bytes: spec.limits.max_output_bytes,
+                            },
+                        );
                     }
                 }
-                Resource::Grant { api_version, metadata, spec } => {
+                Resource::Grant {
+                    api_version,
+                    metadata,
+                    spec,
+                } => {
                     ensure!(api_version == API_VERSION, "unsupported Grant apiVersion");
                     ensure!(valid_name(&metadata.name), "invalid grant name");
-                    ensure!(used_names.insert(("Grant", metadata.name)), "duplicate Grant");
+                    ensure!(
+                        used_names.insert(("Grant", metadata.name)),
+                        "duplicate Grant"
+                    );
                     ensure!(spec.targets.kind == "Host", "unsupported grant target kind");
-                    ensure!(!spec.subjects.is_empty() && !spec.capabilities.is_empty() && !spec.targets.names.is_empty(),
-                        "grant must have subjects, capabilities and targets");
+                    ensure!(
+                        !spec.subjects.is_empty()
+                            && !spec.capabilities.is_empty()
+                            && !spec.targets.names.is_empty(),
+                        "grant must have subjects, capabilities and targets"
+                    );
                     for s in &spec.subjects {
-                        ensure!(s.issuer == "local://trusted-launcher" && valid_name(&s.subject),
-                            "unsupported subject identity");
+                        ensure!(
+                            s.issuer == "local://trusted-launcher" && valid_name(&s.subject),
+                            "unsupported subject identity"
+                        );
                     }
                     grants.push(spec);
                 }
@@ -239,13 +293,20 @@ impl CompiledConfig {
         }
         for grant in &grants {
             for name in &grant.capabilities {
-                ensure!(capabilities.contains_key(name), "grant references unknown capability");
+                ensure!(
+                    capabilities.contains_key(name),
+                    "grant references unknown capability"
+                );
             }
             for name in &grant.targets.names {
                 ensure!(hosts.contains_key(name), "grant references unknown host");
             }
         }
-        Ok(Self { hosts, capabilities, grants })
+        Ok(Self {
+            hosts,
+            capabilities,
+            grants,
+        })
     }
 
     /// Local/stdio identity is asserted by the trusted process launcher.
@@ -253,16 +314,23 @@ impl CompiledConfig {
         self.capabilities.contains_key(capability)
             && self.hosts.contains_key(target)
             && self.grants.iter().any(|g| {
-                g.subjects.iter().any(|s| s.subject == principal && s.issuer == "local://trusted-launcher")
+                g.subjects
+                    .iter()
+                    .any(|s| s.subject == principal && s.issuer == "local://trusted-launcher")
                     && g.capabilities.iter().any(|n| n == capability)
                     && g.targets.names.iter().any(|n| n == target)
             })
     }
 
     pub fn visible_capabilities(&self, principal: &str) -> Vec<&PublishedCapability> {
-        self.capabilities.values().filter(|cap| {
-            self.hosts.keys().any(|host| self.authorized(principal, &cap.name, host))
-        }).collect()
+        self.capabilities
+            .values()
+            .filter(|cap| {
+                self.hosts
+                    .keys()
+                    .any(|host| self.authorized(principal, &cap.name, host))
+            })
+            .collect()
     }
 
     pub fn invoke(&self, principal: &str, capability: &str, args: Value) -> Result<Value> {
@@ -272,14 +340,22 @@ impl CompiledConfig {
         let Some(obj) = args.as_object() else {
             bail!("invalid input");
         };
-        ensure!(obj.len() == 1 && obj.get("target").and_then(Value::as_str).is_some(), "invalid input");
+        ensure!(
+            obj.len() == 1 && obj.get("target").and_then(Value::as_str).is_some(),
+            "invalid input"
+        );
         let target = obj["target"].as_str().unwrap_or_default();
-        ensure!(self.authorized(principal, capability, target),
-            "target not found or not authorized");
+        ensure!(
+            self.authorized(principal, capability, target),
+            "target not found or not authorized"
+        );
         ensure!(cap.operation_ref == OPERATION, "operation not available");
         let host = self.hosts.get(target).context("target unavailable")?;
         let result = json!({"id": host.metadata.name, "hostname": host.spec.address});
-        ensure!(serde_json::to_vec(&result)?.len() <= cap.max_output_bytes, "output exceeds limit");
+        ensure!(
+            serde_json::to_vec(&result)?.len() <= cap.max_output_bytes,
+            "output exceeds limit"
+        );
         Ok(result)
     }
 }
@@ -329,13 +405,31 @@ spec:
         let config = CompiledConfig::compile(parse(&fixture())).unwrap();
         assert_eq!(config.visible_capabilities("operator").len(), 1);
         assert!(config.visible_capabilities("guest").is_empty());
-        assert!(config.invoke("guest", "inventory.inspect", json!({"target":"alpha"})).is_err());
+        assert!(
+            config
+                .invoke("guest", "inventory.inspect", json!({"target":"alpha"}))
+                .is_err()
+        );
         assert_eq!(
-            config.invoke("operator", "inventory.inspect", json!({"target":"alpha"})).unwrap()["id"],
+            config
+                .invoke("operator", "inventory.inspect", json!({"target":"alpha"}))
+                .unwrap()["id"],
             "alpha"
         );
-        assert!(config.invoke("operator", "inventory.inspect", json!({"target":"other"})).is_err());
-        assert!(config.invoke("operator", "inventory.inspect", json!({"target":"alpha","command":"id"})).is_err());
+        assert!(
+            config
+                .invoke("operator", "inventory.inspect", json!({"target":"other"}))
+                .is_err()
+        );
+        assert!(
+            config
+                .invoke(
+                    "operator",
+                    "inventory.inspect",
+                    json!({"target":"alpha","command":"id"})
+                )
+                .is_err()
+        );
     }
 
     #[test]
@@ -351,19 +445,28 @@ spec: {address: alpha.example.invalid}
 
     #[test]
     fn override_attempts_are_rejected() {
-        let unsafe_yaml = fixture().replace("  targetKind: Host", "  targetKind: Host\n  command: whoami");
+        let unsafe_yaml = fixture().replace(
+            "  targetKind: Host",
+            "  targetKind: Host\n  command: whoami",
+        );
         assert!(serde_saphyr::from_multiple::<Resource>(&unsafe_yaml).is_err());
 
         let unknown_op = fixture().replace(OPERATION, "builtin.shell.exec/v1");
         assert!(CompiledConfig::compile(parse(&unknown_op)).is_err());
 
-        let loosen_schema = fixture().replace("additionalProperties\":false", "additionalProperties\":true");
+        let loosen_schema = fixture().replace(
+            "additionalProperties\":false",
+            "additionalProperties\":true",
+        );
         assert!(CompiledConfig::compile(parse(&loosen_schema)).is_err());
     }
 
     #[test]
     fn unknown_versions_and_duplicate_keys_fail() {
-        assert!(CompiledConfig::compile(parse(&fixture().replace(API_VERSION, "hostmarshal.io/v9"))).is_err());
+        assert!(
+            CompiledConfig::compile(parse(&fixture().replace(API_VERSION, "hostmarshal.io/v9")))
+                .is_err()
+        );
         let duplicate_key = "kind: Host\nkind: Grant\n";
         assert!(serde_saphyr::from_multiple::<Resource>(duplicate_key).is_err());
     }

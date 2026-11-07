@@ -5,8 +5,8 @@ use std::sync::Arc;
 use rmcp::{
     ErrorData as McpError, ServerHandler,
     model::{
-        CacheScope, CallToolRequestParams, CallToolResponse, CallToolResult,
-        ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerInfo, Tool,
+        CacheScope, CallToolRequestParams, CallToolResponse, CallToolResult, ListToolsResult,
+        PaginatedRequestParams, ServerCapabilities, ServerInfo, Tool,
     },
     service::{RequestContext, RoleServer},
 };
@@ -22,7 +22,10 @@ pub struct DeclarativeMcp {
 
 impl DeclarativeMcp {
     pub fn new(config: CompiledConfig, principal: String) -> Self {
-        Self { config: Arc::new(config), principal }
+        Self {
+            config: Arc::new(config),
+            principal,
+        }
     }
 
     fn definition(&self, cap: &PublishedCapability) -> Tool {
@@ -62,7 +65,8 @@ impl ServerHandler for DeclarativeMcp {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
-        let tools = self.config
+        let tools = self
+            .config
             .visible_capabilities(&self.principal)
             .into_iter()
             .map(|cap| self.definition(cap))
@@ -82,7 +86,8 @@ impl ServerHandler for DeclarativeMcp {
         if self.authorized_tool(name).is_none() {
             return Ok(CallToolResult::error(vec![rmcp::model::ContentBlock::text(
                 "capability not found or not authorized",
-            )]).into());
+            )])
+            .into());
         }
         let args = Value::Object(request.arguments.unwrap_or_default());
         let result = match self.config.invoke(&self.principal, name, args) {

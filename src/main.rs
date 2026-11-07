@@ -2,10 +2,7 @@ use std::{env, path::Path};
 
 use anyhow::{Result, bail, ensure};
 use hostmarshal::{
-    HostMarshal,
-    config::Config,
-    declarative::CompiledConfig,
-    dynamic_mcp::DeclarativeMcp,
+    HostMarshal, config::Config, declarative::CompiledConfig, dynamic_mcp::DeclarativeMcp,
 };
 use rmcp::{ServiceExt, transport::stdio};
 
@@ -29,7 +26,9 @@ async fn main() -> Result<()> {
             ensure!(
                 !principal.is_empty()
                     && principal.len() <= 128
-                    && principal.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_')),
+                    && principal
+                        .bytes()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_')),
                 "invalid launcher principal"
             );
             // A trusted launcher must choose both directory and principal. MCP cannot change them.
