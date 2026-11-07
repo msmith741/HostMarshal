@@ -74,14 +74,15 @@ if __name__ == "__main__":
         cap = (temp / "capability.yaml").read_text()
         # Same trusted operation, different YAML tool name, no Rust handler changes.
         (temp / "capability-two.yaml").write_text(
-            cap.replace("inventory.inspect", "inventory.alternate")
+            cap.replace("  name: inventory.inspect", "  name: inventory.alternate")
         )
         grant = (temp / "grant.yaml").read_text()
         (temp / "grant-two.yaml").write_text(
             grant.replace("example-inventory-reader", "another-reader")
-                 .replace("inventory.inspect", "inventory.alternate")
+                 .replace("    - inventory.inspect", "    - inventory.alternate")
         )
         cli_validate(temp)
+        session(temp, "example-operator", {"inventory.inspect", "inventory.alternate"})
         # Privilege-widening attempts fail config validation.
         (temp / "capability-two.yaml").write_text(
             cap.replace("inventory.inspect", "inventory.alternate")
