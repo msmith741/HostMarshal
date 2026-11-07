@@ -11,8 +11,13 @@ use crate::declarative::CompiledConfig;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReloadOutcome {
-    Applied { previous: Option<String>, current: String },
-    Unchanged { current: String },
+    Applied {
+        previous: Option<String>,
+        current: String,
+    },
+    Unchanged {
+        current: String,
+    },
 }
 
 /// An active snapshot or emergency-deny state. Each request reads one consistent
@@ -46,12 +51,17 @@ impl ConfigStore {
             .active
             .write()
             .map_err(|_| anyhow!("configuration lock poisoned; denying requests"))?;
-        let previous = guard.as_ref().map(|snapshot| snapshot.snapshot_digest.clone());
+        let previous = guard
+            .as_ref()
+            .map(|snapshot| snapshot.snapshot_digest.clone());
         if previous.as_deref() == Some(digest.as_str()) {
             return Ok(ReloadOutcome::Unchanged { current: digest });
         }
         *guard = Some(Arc::new(next));
-        Ok(ReloadOutcome::Applied { previous, current: digest })
+        Ok(ReloadOutcome::Applied {
+            previous,
+            current: digest,
+        })
     }
 
     /// Emergency lockout, applied atomically for all subsequent request starts.
@@ -71,8 +81,10 @@ mod tests {
     use super::*;
 
     fn fixture() -> CompiledConfig {
-        CompiledConfig::load(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("config/v1alpha1"))
-            .expect("known valid fixture")
+        CompiledConfig::load(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("config/v1alpha1"),
+        )
+        .expect("known valid fixture")
     }
 
     #[test]
@@ -88,21 +100,30 @@ mod tests {
         let deny_all = CompiledConfig::compile(Vec::new()).unwrap();
         let result = store.activate(deny_all).unwrap();
         assert!(matches!(result, ReloadOutcome::Applied { .. }));
-        assert!(!store.snapshot().unwrap().authorized("example-operator", "inventory.inspect", "sample-linux"));
+        assert!(!store.snapshot().unwrap().authorized(
+            "example-operator",
+            "inventory.inspect",
+            "sample-linux"
+        ));
         // A reader that already acquired its Arc holds an immutable old snapshot.
         assert!(original.authorized("example-operator", "inventory.inspect", "sample-linux"));
 
         store.lockdown().unwrap();
         assert!(store.snapshot().is_none());
         store.activate(fixture()).unwrap();
-        assert!(store.snapshot().unwrap().authorized("example-operator", "inventory.inspect", "sample-linux"));
+        assert!(store.snapshot().unwrap().authorized(
+            "example-operator",
+            "inventory.inspect",
+            "sample-linux"
+        ));
     }
 
     #[test]
     fn rejected_reload_keeps_valid_configuration() {
         let store = ConfigStore::new(fixture());
         let prior = store.snapshot().unwrap().snapshot_digest.clone();
-        let impossible = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("config/not-a-directory");
+        let impossible =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("config/not-a-directory");
         assert!(store.reload(&impossible).is_err());
         assert_eq!(store.snapshot().unwrap().snapshot_digest, prior);
     }

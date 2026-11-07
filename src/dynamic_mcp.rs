@@ -12,7 +12,10 @@ use rmcp::{
 };
 use serde_json::Value;
 
-use crate::{declarative::{CompiledConfig, PublishedCapability}, snapshot::ConfigStore};
+use crate::{
+    declarative::{CompiledConfig, PublishedCapability},
+    snapshot::ConfigStore,
+};
 
 #[derive(Clone)]
 pub struct DeclarativeMcp {
@@ -22,10 +25,7 @@ pub struct DeclarativeMcp {
 
 impl DeclarativeMcp {
     pub fn new(store: Arc<ConfigStore>, principal: String) -> Self {
-        Self {
-            store,
-            principal,
-        }
+        Self { store, principal }
     }
 
     fn definition(&self, cap: &PublishedCapability) -> Tool {
@@ -94,7 +94,8 @@ impl ServerHandler for DeclarativeMcp {
         let Some(snapshot) = self.store.snapshot() else {
             return Ok(CallToolResult::error(vec![rmcp::model::ContentBlock::text(
                 "capability not found or not authorized",
-            )]).into());
+            )])
+            .into());
         };
         if self.authorized_tool(&snapshot, name).is_none() {
             return Ok(CallToolResult::error(vec![rmcp::model::ContentBlock::text(

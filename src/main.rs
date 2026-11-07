@@ -1,10 +1,11 @@
-use std::{env, path::Path, sync::Arc};
 #[cfg(unix)]
 use std::path::PathBuf;
+use std::{env, path::Path, sync::Arc};
 
 use anyhow::{Result, bail, ensure};
 use hostmarshal::{
-    HostMarshal, config::Config, declarative::CompiledConfig, dynamic_mcp::DeclarativeMcp, snapshot::ConfigStore,
+    HostMarshal, config::Config, declarative::CompiledConfig, dynamic_mcp::DeclarativeMcp,
+    snapshot::ConfigStore,
 };
 use rmcp::{ServiceExt, transport::stdio};
 
