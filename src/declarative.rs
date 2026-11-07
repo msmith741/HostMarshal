@@ -6,9 +6,9 @@ use std::{
     path::Path,
 };
 
-use anyhow::{Context, Result, ensure};
 #[cfg(test)]
 use anyhow::bail;
+use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};

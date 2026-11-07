@@ -2,11 +2,11 @@
 
 **Secure infrastructure operations through declarative capabilities and policy-controlled execution.**
 
-HostMarshal is a vendor-neutral, pre-alpha Rust infrastructure capability gateway. It supports MCP over stdio and is being extended from an initial hard-coded inventory proof of concept into an independently configurable, security-governed execution engine.
+HostMarshal is a vendor-neutral, pre-alpha Rust infrastructure capability gateway. It supports MCP over stdio, versioned YAML capabilities, and a centralized M2 authorization/audit execution coordinator for static inventory observations.
 
-> **Pre-alpha.** The declarative mode is limited to approved **static inventory observation**. It does **not** connect to hosts, invoke remote commands, load plugins, authenticate remote clients, broker secrets or provide durable auditing. Do not treat it as a production security boundary.
+> **Pre-alpha.** Only static inventory observation is permitted. HostMarshal does **not** connect to hosts, execute commands, load plugins, authenticate remote clients or issue real credentials. Stderr/optional local file audit exists, but no independent tamper-evident audit service or production security guarantees.
 
-## Declarative M1 slice
+## Declarative M1 configuration + M2 execution runtime
 
 YAML resources under `config/v1alpha1/` define a fictional Host, a published Capability and an independent Grant. The capability references the compiled-in `builtin.inventory.inspect/v1` operation. The runtime validates resources before serving MCP and denies invocations without an exact matching local-launcher subject/capability/target grant.
 
@@ -17,7 +17,7 @@ cargo test
 cargo run -- config validate config/v1alpha1
 cargo run -- config inspect config/v1alpha1
 cargo run -- config schema > hostmarshal-v1alpha1.schema.json
-cargo run -- --config-dir config/v1alpha1 --principal example-operator
+cargo run --locked -- --config-dir config/v1alpha1 --principal example-operator
 ~~~
 
 To use stdio MCP, point a trusted client's MCP server configuration at the compiled binary with the same `--config-dir` and `--principal` launcher arguments. **The launcher must be trusted**: stdio does not authenticate an arbitrary MCP peer, and the principal must not be chosen by the remote tool request.
@@ -39,27 +39,27 @@ A successful reload applies changed grants to newly starting calls; already-star
 
 This does not provide cryptographic caller authentication, durable audit, atomic on-disk configuration deployment, or cancellation/revocation guarantees for future live adapters. See [Security Architecture](docs/SECURITY_ARCHITECTURE.md).
 
+## M2 audited execution (static observation only)
+
+Every published MCP `tools/call` goes through the central [execution runtime](docs/EXECUTION_RUNTIME.md): verified trusted-launcher identity, exact operation/target grant, mandatory pre-execution audit, optional scoped credential request, bounded built-in adapter, output verification and terminal audit. The production broker denies any credential request. **No live adapters are available.**
+
+Structured audit events go to stderr by default; for a local synchronized JSONL file, run from a trusted launcher with `--audit-log /protected/audit/events.jsonl` (outside the YAML directory). See [Audit](docs/AUDIT.md) for permissions, log retention and limitations.
+
 ## Parser fuzzing and MCP compatibility
 
 The regular Rust CI suite includes a deterministic mutation test for the YAML loader. The separate [fuzz workspace](fuzz/README.md) supports `cargo-fuzz` coverage-guided campaigns, with a bounded CI smoke and a weekly/manual workflow.
 
 MCP tests cover two stdio protocol eras: `2025-11-25` uses `initialize`; `2026-07-28` uses `server/discover` and stateless request metadata. Neither client-provided `clientInfo` value establishes authorization identity.
 
-## Legacy bootstrap compatibility
+## Pre-alpha migration
 
-The initial two static tools can still be exercised temporarily through:
-
-~~~sh
-cargo run -- --config config/example.json
-~~~
-
-Legacy JSON and new YAML are intentionally distinct; legacy configuration must not be interpreted as modern grants. A later migration will remove the bootstrap route.
+The old unaudited `--config` JSON mode and its hard-coded `list_hosts`/`get_host` tools were removed in M2. Legacy MCP **2025-11-25 framing** is still supported over the new declarative runtime. See [Migration](docs/MIGRATION.md).
 
 ## Documentation
 
 - [Product requirements](docs/PRODUCT.md), [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md)
 - [Configuration](docs/CONFIGURATION.md), [Capabilities](docs/CAPABILITIES.md), [Adapters](docs/ADAPTERS.md)
-- [Security architecture](docs/SECURITY_ARCHITECTURE.md), [Coding standards](docs/CODING_STANDARDS.md)
+- [Security architecture](docs/SECURITY_ARCHITECTURE.md), [Execution runtime](docs/EXECUTION_RUNTIME.md), [Audit](docs/AUDIT.md), [Coding standards](docs/CODING_STANDARDS.md)
 - [Traceability matrix](docs/TRACEABILITY.md), [Machine-readable schemas](docs/SCHEMA_EXPORT.md), [ADRs](docs/adr/README.md)
 - [Test strategy](docs/TEST_STRATEGY.md), [Contributing](CONTRIBUTING.md), [Security policy](SECURITY.md)
 
@@ -74,6 +74,7 @@ python3 tests/mcp_smoke.py
 python3 tests/declarative_smoke.py
 python3 tests/reload_smoke.py  # Unix only
 python3 tests/mcp_modern_smoke.py  # MCP 2026-07-28 stateless
+python3 tests/audit_smoke.py  # audited stdio execution and denial
 # Additional schema drift and independent validation run in CI
 ~~~
 

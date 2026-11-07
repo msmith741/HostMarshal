@@ -1,6 +1,6 @@
 # Security architecture and threat model
 
-**Status: PROPOSED.** Security controls in this document are requirements, **not claims of implemented protections**. For disclosure see [SECURITY.md](../SECURITY.md).
+**Status:** security architecture spans implemented M1/M2 static-observation controls and further **unimplemented** privileged/remote security requirements. Do not infer production assurance from this document. For disclosure see [SECURITY.md](../SECURITY.md).
 
 ## Assets and adversaries
 
@@ -80,6 +80,14 @@ A rejected SIGHUP retains the previous validated snapshot. If that snapshot incl
 M1 requests use one immutable snapshot acquired at request start. Already-started static inventory reads may complete using that snapshot; a successful revocation applies to requests that **start after** the replacement is activated. Side-effecting adapters are still prohibited until interruption and reauthorization at effect boundaries are implemented. No persistent audit of signal provenance exists.
 
 The directory loader currently reads several files in sequence. It does **not** prove filesystem-level transactionality or prevent privileged same-user file replacement races. Stage a complete validated config in a separate protected directory, use an OS-controlled atomic rename or symlink promotion as appropriate, and then signal reload. No client may submit an arbitrary directory or grant change through MCP.
+
+## Implemented M2 execution boundary
+
+The declarative stdio MCP handler now delegates all tool invocations to `ExecutionCoordinator`. The old unaudited JSON handlers were removed. A typed trusted-launcher caller, issuer/subject-aware authorizer and vetted operation descriptor are checked before the broker or adapter. The static-inventory operation is restricted to Observe, Host targets, a deadline, bounded concurrency and an output limit. Tests prove unauthorized requests do not reach adapters or the broker, unexpected output is rejected, and timed-out futures are dropped.
+
+For each invocation, the audit sink must accept `Authorized` *before* credential access/operation execution; failures deny execution. The sink records denied and terminal outcomes with correlation IDs, operation and snapshot digests. Default stderr and optional protected local JSONL/sync-data backends are available, but the latter is **not tamper-evident** and has OS file-replacement risks. Terminal audit failure can only suppress the response, not undo an effect, which is why no mutation is permitted. See [Audit](AUDIT.md).
+
+A `CredentialBroker` interface accepts exact operation/target/purpose scopes. The production broker refuses all requests and no real credential providers are available. External plugins, remote authentication, approvals, cancellation guarantees for privileged work and real host adapters are explicitly absent.
 
 ## Residual risks
 

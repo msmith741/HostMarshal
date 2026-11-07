@@ -24,7 +24,7 @@ HostMarshal provides **typed, authorized, auditable infrastructure operations** 
 | FR-004 | Authenticate/bind caller identity independently of tool arguments | M2; trusted-launcher stdio M1 |
 | FR-005 | Resolve resource IDs/labels from trusted inventory and enforce default-deny policies | M1 |
 | FR-006 | Route all invocations through the same security-enforcing runtime | M2 |
-| FR-007 | Support bounded, typed, read-only observation adapters | M3 |
+| FR-007 | Support bounded, typed, read-only observation adapters | M2 built-in mock; M3 live |
 | FR-008 | Use opaque credentials via provider-neutral broker; never return credentials to clients | M2–M4 |
 | FR-009 | Emit audit outcomes and correlation IDs for decisions and execution | M2 |
 | FR-010 | Publish CLI validation and policy explanation without live credentials | M1–M2 |

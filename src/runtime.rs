@@ -171,21 +171,37 @@ impl ExecutionCoordinator {
         };
 
         let Some(snapshot) = snapshot else {
-            deny(operation_for_log, target_for_log, RuntimeFailure::Unauthorized)?;
+            deny(
+                operation_for_log,
+                target_for_log,
+                RuntimeFailure::Unauthorized,
+            )?;
             return Err(RuntimeFailure::Unauthorized);
         };
         let Some(cap) = snapshot.capabilities.get(capability) else {
-            deny(operation_for_log, target_for_log, RuntimeFailure::Unauthorized)?;
+            deny(
+                operation_for_log,
+                target_for_log,
+                RuntimeFailure::Unauthorized,
+            )?;
             return Err(RuntimeFailure::Unauthorized);
         };
         let Some(target) = target_input else {
-            deny(&cap.operation_ref, target_for_log, RuntimeFailure::InvalidInput)?;
+            deny(
+                &cap.operation_ref,
+                target_for_log,
+                RuntimeFailure::InvalidInput,
+            )?;
             return Err(RuntimeFailure::InvalidInput);
         };
         let target = target.to_owned();
         let valid_input = input.as_object().is_some_and(|obj| obj.len() == 1);
         if !valid_input || target.is_empty() || target.len() > 128 {
-            deny(&cap.operation_ref, target_for_log, RuntimeFailure::InvalidInput)?;
+            deny(
+                &cap.operation_ref,
+                target_for_log,
+                RuntimeFailure::InvalidInput,
+            )?;
             return Err(RuntimeFailure::InvalidInput);
         }
         if !self
@@ -199,7 +215,11 @@ impl ExecutionCoordinator {
             })
             .permitted()
         {
-            deny(&cap.operation_ref, target_for_log, RuntimeFailure::Unauthorized)?;
+            deny(
+                &cap.operation_ref,
+                target_for_log,
+                RuntimeFailure::Unauthorized,
+            )?;
             return Err(RuntimeFailure::Unauthorized);
         }
 
@@ -222,7 +242,11 @@ impl ExecutionCoordinator {
             return Err(RuntimeFailure::Unavailable);
         }
         let Some(host) = snapshot.hosts.get(&target) else {
-            deny(&cap.operation_ref, target_for_log, RuntimeFailure::Unauthorized)?;
+            deny(
+                &cap.operation_ref,
+                target_for_log,
+                RuntimeFailure::Unauthorized,
+            )?;
             return Err(RuntimeFailure::Unauthorized);
         };
 
