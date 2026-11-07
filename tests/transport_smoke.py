@@ -102,8 +102,13 @@ def start_ssh(root):
     # Random ephemeral test-only password, password authentication disabled.
     command("sudo", "chpasswd", input_text=f"{USER}:{os.urandom(24).hex()}\n")
     command("sudo", "install", "-d", "-m", "0755", "/run/sshd")
-    authorized = root / "authorized_keys"
-    authorized.write_text((root / "client_key.pub").read_text())
+    # SSHD must read authorized_keys as the unprivileged login account.
+    # The test temp directory is 0700 to the CI runner and inaccessible there.
+    authorized = Path(f"/home/{USER}/.ssh/authorized_keys")
+    command("sudo", "install", "-d", "-m", "0700",
+            "-o", USER, "-g", USER, str(authorized.parent))
+    command("sudo", "install", "-m", "0600",
+            "-o", USER, "-g", USER, str(root / "client_key.pub"), str(authorized))
     known = root / "known_hosts"
     alias = "sample-linux"
     host_key_pub = (root / "host_key.pub").read_text().split()
@@ -280,7 +285,25 @@ def main():
                 assert discovered == {"linux.uname","https.health"}, discovered
 
                 good_ssh = mcp.tool("linux.uname", "sample-linux")
-                assert good_ssh.get("isError") is not True, good_ssh
+                if good_ssh.get("isError") is True:
+                    diagnostics = subprocess.run(
+                        [
+                            "/usr/bin/ssh", "-F", "/dev/null",
+                            "-o", "BatchMode=yes", "-o", "PasswordAuthentication=no",
+                            "-o", "KbdInteractiveAuthentication=no",
+                            "-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=none",
+                            "-o", "StrictHostKeyChecking=yes",
+                            "-o", "GlobalKnownHostsFile=/dev/null",
+                            "-o", f"UserKnownHostsFile={known}",
+                            "-o", "HostKeyAlias=sample-linux",
+                            "-T", "-i", str(root / "client_key"),
+                            "-l", USER, "-p", str(port), "127.0.0.1", "uname -s",
+                        ], capture_output=True, text=True, timeout=7
+                    )
+                    raise AssertionError(
+                        f"SSH failure: {good_ssh}; direct ssh rc={diagnostics.returncode}, "
+                        f"stdout={diagnostics.stdout!r}, stderr={diagnostics.stderr[-600:]!r}"
+                    )
                 assert good_ssh["structuredContent"] == {
                     "id":"sample-linux", "os":"Linux"
                 }, good_ssh
