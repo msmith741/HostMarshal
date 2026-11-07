@@ -1,6 +1,6 @@
 # Declarative configuration specification
 
-**Status:** limited M1 YAML loader, CLI validation/inspection, generated JSON Schema export, and deterministic effective snapshot digest exist in pre-alpha. Full specification remains a target design; schema narrowing, secure reload, and lifecycle authorization are not implemented. Versioned checked-in schema and external conformance checks are available.
+**Status:** limited M1 YAML loader, CLI validation/inspection, generated JSON Schema export, and deterministic effective snapshot digest exist in pre-alpha. Full specification remains a target design; schema narrowing, durable audit, and lifecycle authorization are not implemented. Unix signal reload with atomic activation and emergency deny is available for the local stdio mode; secure staging of directory trees remains an operator responsibility. Versioned checked-in schema and external conformance checks are available.
 
 ## Goals and resources
 
@@ -87,7 +87,7 @@ The schema export is derived from the Rust resource types and is structural. Sem
 - Never treat old JSON bootstrap configuration as if it were automatically the new security model.
 - Provide explicit migration tooling and fixture tests if bootstrap users need migration.
 - Version schema and operation descriptors independently.
-- Configuration publication should use dry-run validation, immutable digest and atomic promotion, with rollback.
+- The local Unix stdio process supports validated SIGHUP reload with **atomic in-memory promotion**, and SIGUSR1 emergency deny. The on-disk directory must be prepared by a trusted administrator; no cross-platform atomic directory staging, file provenance verification, or remote reload API exists. A failed reload leaves the last known good state active; emergency deny or process stop is required when old authority must be revoked immediately.
 - A revoked grant takes precedence over a cached registry snapshot; cached authorization must not live past revocation guarantees.
 - An authority-widening manifest or operation update requires administrator reapproval.
 
