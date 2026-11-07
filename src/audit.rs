@@ -102,7 +102,9 @@ impl JsonlFileAudit {
             {
                 use std::os::unix::fs::PermissionsExt;
                 if metadata.permissions().mode() & 0o077 != 0 {
-                    return Err(io::Error::other("audit file permissions must be 0600 or stricter"));
+                    return Err(io::Error::other(
+                        "audit file permissions must be 0600 or stricter",
+                    ));
                 }
             }
         }

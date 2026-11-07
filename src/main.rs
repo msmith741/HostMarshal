@@ -54,10 +54,16 @@ async fn main() -> Result<()> {
         {
             serve_declarative(directory, principal, None).await
         }
-        [flag, directory, principal_flag, principal, audit_flag, audit_path]
-            if flag == "--config-dir"
-                && principal_flag == "--principal"
-                && audit_flag == "--audit-log" =>
+        [
+            flag,
+            directory,
+            principal_flag,
+            principal,
+            audit_flag,
+            audit_path,
+        ] if flag == "--config-dir"
+            && principal_flag == "--principal"
+            && audit_flag == "--audit-log" =>
         {
             serve_declarative(directory, principal, Some(audit_path)).await
         }
@@ -80,7 +86,11 @@ async fn main() -> Result<()> {
     }
 }
 
-async fn serve_declarative(directory: &str, principal: &str, audit_path: Option<&str>) -> Result<()> {
+async fn serve_declarative(
+    directory: &str,
+    principal: &str,
+    audit_path: Option<&str>,
+) -> Result<()> {
     // Caller identity and audit destination are bound by the trusted launcher.
     // No MCP message can choose or modify either value.
     let caller = AuthenticatedCaller::from_trusted_launcher(principal)?;

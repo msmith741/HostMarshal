@@ -58,6 +58,9 @@ mod tests {
         }
         let principal = AuthenticatedCaller::from_trusted_launcher("example-operator").unwrap();
         assert_eq!(principal.issuer(), "local://trusted-launcher");
-        assert_eq!(principal.method(), AuthenticationMethod::TrustedLocalLauncher);
+        assert_eq!(
+            principal.method(),
+            AuthenticationMethod::TrustedLocalLauncher
+        );
     }
 }

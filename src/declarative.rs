@@ -370,7 +370,9 @@ impl CompiledConfig {
         self.capabilities.contains_key(capability)
             && self.hosts.contains_key(target)
             && self.grants.iter().any(|g| {
-                g.subjects.iter().any(|s| s.subject == principal && s.issuer == issuer)
+                g.subjects
+                    .iter()
+                    .any(|s| s.subject == principal && s.issuer == issuer)
                     && g.capabilities.iter().any(|n| n == capability)
                     && g.targets.names.iter().any(|n| n == target)
             })

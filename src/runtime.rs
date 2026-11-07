@@ -12,12 +12,12 @@ use serde_json::{Value, json};
 use tokio::{sync::Semaphore, time::timeout};
 
 use crate::{
-    authorization::{AuthorizationRequest, Authorizer, GrantAuthorizer},
     adapter::{
         AdapterInvocation, CredentialRequirement, EffectClass, ResolvedTarget,
         TrustedAdapterCatalog,
     },
     audit::{AuditEvent, AuditPhase, AuditSink},
+    authorization::{AuthorizationRequest, Authorizer, GrantAuthorizer},
     credentials::{CredentialBroker, CredentialScope},
     declarative::{input_schema, output_schema},
     identity::AuthenticatedCaller,
@@ -145,48 +145,101 @@ impl ExecutionCoordinator {
             .and_then(Value::as_str);
         let target_for_log = "<unresolved>";
         // Never echo an arbitrary client-provided tool name into security logs.
-        let log_capability = if snapshot.as_ref().is_some_and(|s| s.capabilities.contains_key(capability)) { capability } else { "<unresolved>" };
+        let log_capability = if snapshot
+            .as_ref()
+            .is_some_and(|s| s.capabilities.contains_key(capability))
+        {
+            capability
+        } else {
+            "<unresolved>"
+        };
         let operation_for_log = "<unresolved>";
 
         let Some(snapshot) = snapshot else {
-            self.denied(caller, &request_id, log_capability, operation_for_log, target_for_log,
-                &digest, RuntimeFailure::Unauthorized)?;
+            self.denied(
+                caller,
+                &request_id,
+                log_capability,
+                operation_for_log,
+                target_for_log,
+                &digest,
+                RuntimeFailure::Unauthorized,
+            )?;
             return Err(RuntimeFailure::Unauthorized);
         };
         let Some(cap) = snapshot.capabilities.get(capability) else {
-            self.denied(caller, &request_id, log_capability, operation_for_log, target_for_log,
-                &digest, RuntimeFailure::Unauthorized)?;
+            self.denied(
+                caller,
+                &request_id,
+                log_capability,
+                operation_for_log,
+                target_for_log,
+                &digest,
+                RuntimeFailure::Unauthorized,
+            )?;
             return Err(RuntimeFailure::Unauthorized);
         };
         let Some(target) = target_input else {
-            self.denied(caller, &request_id, log_capability, &cap.operation_ref, target_for_log,
-                &digest, RuntimeFailure::InvalidInput)?;
+            self.denied(
+                caller,
+                &request_id,
+                log_capability,
+                &cap.operation_ref,
+                target_for_log,
+                &digest,
+                RuntimeFailure::InvalidInput,
+            )?;
             return Err(RuntimeFailure::InvalidInput);
         };
         let target = target.to_owned();
         let valid_input = input.as_object().is_some_and(|obj| obj.len() == 1);
         if !valid_input || target.is_empty() || target.len() > 128 {
-            self.denied(caller, &request_id, log_capability, &cap.operation_ref, target_for_log,
-                &digest, RuntimeFailure::InvalidInput)?;
+            self.denied(
+                caller,
+                &request_id,
+                log_capability,
+                &cap.operation_ref,
+                target_for_log,
+                &digest,
+                RuntimeFailure::InvalidInput,
+            )?;
             return Err(RuntimeFailure::InvalidInput);
         }
-        if !self.authorizer.authorize(AuthorizationRequest {
-            snapshot: &snapshot,
-            caller,
-            capability,
-            operation: &cap.operation_ref,
-            target: &target,
-        }).permitted() {
-            self.denied(caller, &request_id, log_capability, &cap.operation_ref, target_for_log,
-                &digest, RuntimeFailure::Unauthorized)?;
+        if !self
+            .authorizer
+            .authorize(AuthorizationRequest {
+                snapshot: &snapshot,
+                caller,
+                capability,
+                operation: &cap.operation_ref,
+                target: &target,
+            })
+            .permitted()
+        {
+            self.denied(
+                caller,
+                &request_id,
+                log_capability,
+                &cap.operation_ref,
+                target_for_log,
+                &digest,
+                RuntimeFailure::Unauthorized,
+            )?;
             return Err(RuntimeFailure::Unauthorized);
         }
 
         // Trust-boundary checks are repeated in the coordinator; a manifest is
         // never permitted to redefine risk, targets, schemas or maximum limits.
         let Some(adapter) = self.adapters.resolve(&cap.operation_ref) else {
-            self.denied(caller, &request_id, log_capability, &cap.operation_ref, &target,
-                &digest, RuntimeFailure::Unavailable)?;
+            self.denied(
+                caller,
+                &request_id,
+                log_capability,
+                &cap.operation_ref,
+                &target,
+                &digest,
+                RuntimeFailure::Unavailable,
+            )?;
             return Err(RuntimeFailure::Unavailable);
         };
         let desc = adapter.descriptor();
@@ -198,21 +251,42 @@ impl ExecutionCoordinator {
             || cap.max_output_bytes == 0
             || cap.max_output_bytes > desc.max_output_bytes
         {
-            self.denied(caller, &request_id, log_capability, &cap.operation_ref, &target,
-                &digest, RuntimeFailure::Unavailable)?;
+            self.denied(
+                caller,
+                &request_id,
+                log_capability,
+                &cap.operation_ref,
+                &target,
+                &digest,
+                RuntimeFailure::Unavailable,
+            )?;
             return Err(RuntimeFailure::Unavailable);
         }
         let Some(host) = snapshot.hosts.get(&target) else {
-            self.denied(caller, &request_id, log_capability, &cap.operation_ref, target_for_log,
-                &digest, RuntimeFailure::Unauthorized)?;
+            self.denied(
+                caller,
+                &request_id,
+                log_capability,
+                &cap.operation_ref,
+                target_for_log,
+                &digest,
+                RuntimeFailure::Unauthorized,
+            )?;
             return Err(RuntimeFailure::Unauthorized);
         };
 
         let permit = match self.capacity.try_acquire() {
             Ok(permit) => permit,
             Err(_) => {
-                self.denied(caller, &request_id, log_capability, desc.id, &target,
-                    &digest, RuntimeFailure::Busy)?;
+                self.denied(
+                    caller,
+                    &request_id,
+                    log_capability,
+                    desc.id,
+                    &target,
+                    &digest,
+                    RuntimeFailure::Busy,
+                )?;
                 return Err(RuntimeFailure::Busy);
             }
         };
@@ -233,7 +307,8 @@ impl ExecutionCoordinator {
 
         // This is a mandatory *pre-execution* commitment even for observation.
         // A missing/broken audit sink blocks the broker and adapter.
-        self.audit.record(&event(AuditPhase::Authorized, "authorized"))
+        self.audit
+            .record(&event(AuditPhase::Authorized, "authorized"))
             .map_err(|_| RuntimeFailure::AuditUnavailable)?;
 
         let lease = match desc.credential {
@@ -290,10 +365,19 @@ impl ExecutionCoordinator {
         digest: &str,
         failure: RuntimeFailure,
     ) -> Result<(), RuntimeFailure> {
-        self.audit.record(&AuditEvent::new(
-            request_id, caller.issuer(), caller.subject(), capability, operation, target,
-            digest, AuditPhase::Denied, failure.reason_code(),
-        )).map_err(|_| RuntimeFailure::AuditUnavailable)
+        self.audit
+            .record(&AuditEvent::new(
+                request_id,
+                caller.issuer(),
+                caller.subject(),
+                capability,
+                operation,
+                target,
+                digest,
+                AuditPhase::Denied,
+                failure.reason_code(),
+            ))
+            .map_err(|_| RuntimeFailure::AuditUnavailable)
     }
 
     fn fail(
@@ -307,7 +391,6 @@ impl ExecutionCoordinator {
         Err(failure)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -345,14 +428,21 @@ mod tests {
             }
         }
         fn phases(&self) -> Vec<AuditPhase> {
-            self.events.lock().unwrap().iter().map(|e| e.phase).collect()
+            self.events
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|e| e.phase)
+                .collect()
         }
     }
 
     impl AuditSink for MemoryAudit {
         fn record(&self, event: &AuditEvent) -> std::io::Result<()> {
             if self.reject_phase == Some(event.phase) {
-                return Err(std::io::Error::other("injected audit failure: SECRET-NEVER-LOG"));
+                return Err(std::io::Error::other(
+                    "injected audit failure: SECRET-NEVER-LOG",
+                ));
             }
             self.events.lock().unwrap().push(event.clone());
             Ok(())
@@ -393,7 +483,9 @@ mod tests {
         supported_target_kind: "Host",
         max_timeout: Duration::from_millis(20),
         max_output_bytes: 4096,
-        credential: CredentialRequirement::Scoped { purpose: "inspect-only" },
+        credential: CredentialRequirement::Scoped {
+            purpose: "inspect-only",
+        },
     };
     const OBSERVE_DESCRIPTOR: OperationDescriptor = OperationDescriptor {
         credential: CredentialRequirement::None,
@@ -408,7 +500,11 @@ mod tests {
 
     impl TestAdapter {
         fn new(kind: &'static str, descriptor: &'static OperationDescriptor) -> Self {
-            Self { calls: AtomicUsize::new(0), kind, descriptor }
+            Self {
+                calls: AtomicUsize::new(0),
+                kind,
+                descriptor,
+            }
         }
     }
 
@@ -464,12 +560,21 @@ mod tests {
         let broker = Arc::new(BrokerSpy::new("error"));
         let audit = Arc::new(MemoryAudit::new(None));
         let runtime = coordinator(adapter.clone(), broker.clone(), audit.clone());
-        let result = runtime.invoke(&caller("example-operator"), "inventory.inspect",
-            json!({"target":"sample-linux"})).await.unwrap();
+        let result = runtime
+            .invoke(
+                &caller("example-operator"),
+                "inventory.inspect",
+                json!({"target":"sample-linux"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(result["id"], "sample-linux");
         assert_eq!(adapter.calls.load(Ordering::SeqCst), 1);
         assert_eq!(broker.count.load(Ordering::SeqCst), 0);
-        assert_eq!(audit.phases(), vec![AuditPhase::Authorized, AuditPhase::Succeeded]);
+        assert_eq!(
+            audit.phases(),
+            vec![AuditPhase::Authorized, AuditPhase::Succeeded]
+        );
         let events = audit.events.lock().unwrap();
         assert_eq!(events[0].request_id, events[1].request_id);
         assert_eq!(events[0].subject, "example-operator");
@@ -484,10 +589,26 @@ mod tests {
         let audit = Arc::new(MemoryAudit::new(None));
         let runtime = coordinator(adapter.clone(), broker.clone(), audit.clone());
         let cases = [
-            (caller("unauthorized"), "inventory.inspect", json!({"target":"sample-linux"})),
-            (caller("example-operator"), "inventory.inspect", json!({"target":"unknown"})),
-            (caller("example-operator"), "inventory.inspect", json!({"target":"sample-linux","command":"id"})),
-            (caller("example-operator"), "inventory.unpublished", json!({"target":"sample-linux"})),
+            (
+                caller("unauthorized"),
+                "inventory.inspect",
+                json!({"target":"sample-linux"}),
+            ),
+            (
+                caller("example-operator"),
+                "inventory.inspect",
+                json!({"target":"unknown"}),
+            ),
+            (
+                caller("example-operator"),
+                "inventory.inspect",
+                json!({"target":"sample-linux","command":"id"}),
+            ),
+            (
+                caller("example-operator"),
+                "inventory.unpublished",
+                json!({"target":"sample-linux"}),
+            ),
         ];
         for (subject, tool, args) in cases {
             assert!(runtime.invoke(&subject, tool, args).await.is_err());
@@ -503,8 +624,14 @@ mod tests {
         let broker = Arc::new(BrokerSpy::new("correct"));
         let audit = Arc::new(MemoryAudit::new(Some(AuditPhase::Authorized)));
         let runtime = coordinator(adapter.clone(), broker.clone(), audit);
-        let failure = runtime.invoke(&caller("example-operator"), "inventory.inspect",
-            json!({"target":"sample-linux"})).await.unwrap_err();
+        let failure = runtime
+            .invoke(
+                &caller("example-operator"),
+                "inventory.inspect",
+                json!({"target":"sample-linux"}),
+            )
+            .await
+            .unwrap_err();
         assert_eq!(failure, RuntimeFailure::AuditUnavailable);
         assert_eq!(adapter.calls.load(Ordering::SeqCst), 0);
         assert_eq!(broker.count.load(Ordering::SeqCst), 0);
@@ -517,17 +644,28 @@ mod tests {
             let broker = Arc::new(BrokerSpy::new(mode));
             let audit = Arc::new(MemoryAudit::new(None));
             let runtime = coordinator(adapter.clone(), broker.clone(), audit.clone());
-            let result = runtime.invoke(&caller("example-operator"), "inventory.inspect",
-                json!({"target":"sample-linux"})).await;
+            let result = runtime
+                .invoke(
+                    &caller("example-operator"),
+                    "inventory.inspect",
+                    json!({"target":"sample-linux"}),
+                )
+                .await;
             assert_eq!(broker.count.load(Ordering::SeqCst), 1);
             if mode == "correct" {
                 assert!(result.is_ok());
                 assert_eq!(adapter.calls.load(Ordering::SeqCst), 1);
-                assert_eq!(audit.phases(), vec![AuditPhase::Authorized, AuditPhase::Succeeded]);
+                assert_eq!(
+                    audit.phases(),
+                    vec![AuditPhase::Authorized, AuditPhase::Succeeded]
+                );
             } else {
                 assert_eq!(result.unwrap_err(), RuntimeFailure::BrokerUnavailable);
                 assert_eq!(adapter.calls.load(Ordering::SeqCst), 0);
-                assert_eq!(audit.phases(), vec![AuditPhase::Authorized, AuditPhase::Failed]);
+                assert_eq!(
+                    audit.phases(),
+                    vec![AuditPhase::Authorized, AuditPhase::Failed]
+                );
             }
             assert!(!format!("{:?}", audit.events.lock().unwrap()).contains("SECRET-CANARY"));
         }
@@ -540,15 +678,23 @@ mod tests {
             let broker = Arc::new(BrokerSpy::new("error"));
             let audit = Arc::new(MemoryAudit::new(None));
             let runtime = coordinator(adapter, broker, audit.clone());
-            let result = runtime.invoke(&caller("example-operator"), "inventory.inspect",
-                json!({"target":"sample-linux"})).await;
+            let result = runtime
+                .invoke(
+                    &caller("example-operator"),
+                    "inventory.inspect",
+                    json!({"target":"sample-linux"}),
+                )
+                .await;
             let expected = match kind {
                 "delay" => RuntimeFailure::TimedOut,
                 "bad-output" => RuntimeFailure::InvalidOutput,
                 _ => RuntimeFailure::AdapterFailed,
             };
             assert_eq!(result.unwrap_err(), expected);
-            assert_eq!(audit.phases(), vec![AuditPhase::Authorized, AuditPhase::Failed]);
+            assert_eq!(
+                audit.phases(),
+                vec![AuditPhase::Authorized, AuditPhase::Failed]
+            );
         }
     }
 
@@ -559,8 +705,14 @@ mod tests {
         let audit = Arc::new(MemoryAudit::new(Some(AuditPhase::Succeeded)));
         let runtime = coordinator(adapter.clone(), broker, audit.clone());
         assert_eq!(
-            runtime.invoke(&caller("example-operator"), "inventory.inspect",
-                json!({"target":"sample-linux"})).await.unwrap_err(),
+            runtime
+                .invoke(
+                    &caller("example-operator"),
+                    "inventory.inspect",
+                    json!({"target":"sample-linux"})
+                )
+                .await
+                .unwrap_err(),
             RuntimeFailure::AuditUnavailable
         );
         assert_eq!(adapter.calls.load(Ordering::SeqCst), 1);
