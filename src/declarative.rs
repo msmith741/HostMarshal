@@ -394,9 +394,9 @@ impl CompiledConfig {
         self.capabilities
             .values()
             .filter(|cap| {
-                self.hosts.keys().any(|host| {
-                    self.authorized_identity(issuer, principal, &cap.name, host)
-                })
+                self.hosts
+                    .keys()
+                    .any(|host| self.authorized_identity(issuer, principal, &cap.name, host))
             })
             .collect()
     }
@@ -509,11 +509,15 @@ spec:
     #[test]
     fn catalog_never_confuses_identical_subjects_from_different_issuers() {
         let config = CompiledConfig::compile(parse(&fixture())).unwrap();
-        assert!(config.visible_capabilities_for(
-            "https://different-issuer.example.invalid", "operator"
-        ).is_empty());
+        assert!(
+            config
+                .visible_capabilities_for("https://different-issuer.example.invalid", "operator")
+                .is_empty()
+        );
         assert_eq!(
-            config.visible_capabilities_for("local://trusted-launcher", "operator").len(),
+            config
+                .visible_capabilities_for("local://trusted-launcher", "operator")
+                .len(),
             1
         );
     }

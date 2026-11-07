@@ -9,7 +9,10 @@ use std::{
 };
 
 use serde_json::{Value, json};
-use tokio::{sync::Semaphore, time::{Instant, timeout_at}};
+use tokio::{
+    sync::Semaphore,
+    time::{Instant, timeout_at},
+};
 
 use crate::{
     adapter::{
@@ -422,7 +425,8 @@ mod tests {
         fn acquire(
             &self,
             scope: CredentialScope,
-        ) -> Pin<Box<dyn Future<Output = Result<CredentialLease, BrokerFailure>> + Send + '_>> {
+        ) -> Pin<Box<dyn Future<Output = Result<CredentialLease, BrokerFailure>> + Send + '_>>
+        {
             self.count.fetch_add(1, Ordering::SeqCst);
             Box::pin(async move {
                 match self.mode {
@@ -641,12 +645,20 @@ mod tests {
         let broker = Arc::new(BrokerSpy::new("delay"));
         let audit = Arc::new(MemoryAudit::new(None));
         let runtime = coordinator(adapter.clone(), broker.clone(), audit.clone());
-        let result = runtime.invoke(&caller("example-operator"), "inventory.inspect",
-            json!({"target":"sample-linux"})).await;
+        let result = runtime
+            .invoke(
+                &caller("example-operator"),
+                "inventory.inspect",
+                json!({"target":"sample-linux"}),
+            )
+            .await;
         assert_eq!(result.unwrap_err(), RuntimeFailure::TimedOut);
         assert_eq!(broker.count.load(Ordering::SeqCst), 1);
         assert_eq!(adapter.calls.load(Ordering::SeqCst), 0);
-        assert_eq!(audit.phases(), vec![AuditPhase::Authorized, AuditPhase::Failed]);
+        assert_eq!(
+            audit.phases(),
+            vec![AuditPhase::Authorized, AuditPhase::Failed]
+        );
     }
 
     #[tokio::test]
