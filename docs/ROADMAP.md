@@ -16,7 +16,7 @@
 - Small built-in mock/inventory operation catalog, **not** general shell execution.
 - Refactor the merged hard-coded bootstrap implementation against these contracts; add checked-in `Cargo.lock`.
 
-**Gate:** adding a YAML-only capability over an existing vetted mock operation needs no Rust change; authorized calls succeed and denied calls never reach the adapter; malformed or privilege-escalating manifests fail load. Test at least one legacy and the current supported MCP version.
+**Progress (partial):** versioned strict YAML parsing, one trusted static-inventory operation, local launcher identity, dynamic MCP listing/invocation, and validation CLI are being implemented in the first M1 slice. Full published schemas, config digests, reload/revocation, migration and modern MCP protocol conformance remain open.\n\n**Gate:** adding a YAML-only capability over an existing vetted mock operation needs no Rust change; authorized calls succeed and denied calls never reach the adapter; malformed or privilege-escalating manifests fail load. Test at least one legacy and the current supported MCP version.
 
 ## M2 — Security-enforcing execution runtime
 

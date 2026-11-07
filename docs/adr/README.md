@@ -1,15 +1,15 @@
 # Architecture decision records
 
-**Status: proposals for maintainer review, not accepted or implemented contracts.** The following ADRs are intended to freeze HostMarshal's high-level direction **before** broadening the bootstrap implementation.
+**Status:** ADR-0003 through ADR-0006 were reviewed and **Accepted** on 2026-11-07 with explicit acceptance clarifications; the remaining ADRs are Proposed. Acceptance is a design decision, not evidence that planned controls are implemented.
 
 | ID | Title | Status |
 | --- | --- | --- |
 | [0001](0001-vendor-neutral-product-boundary.md) | Vendor-neutral product scope | Proposed |
 | [0002](0002-transport-independent-rust-core.md) | Transport-independent Rust core | Proposed |
-| [0003](0003-versioned-yaml-resources.md) | Versioned declarative configuration | Proposed |
-| [0004](0004-dynamic-capabilities-and-operation-registry.md) | Dynamic capabilities and trusted operation registry | Proposed |
-| [0005](0005-separate-install-publish-and-invoke-authority.md) | Separate installation, publication and invocation authority | Proposed |
-| [0006](0006-typed-adapters-and-external-isolation.md) | Typed adapters and plugin isolation | Proposed |
+| [0003](0003-versioned-yaml-resources.md) | Versioned declarative configuration | Accepted |
+| [0004](0004-dynamic-capabilities-and-operation-registry.md) | Dynamic capabilities and trusted operation registry | Accepted |
+| [0005](0005-separate-install-publish-and-invoke-authority.md) | Separate installation, publication and invocation authority | Accepted |
+| [0006](0006-typed-adapters-and-external-isolation.md) | Typed adapters and plugin isolation | Accepted |
 | [0007](0007-identity-and-authorization-boundaries.md) | Identity and authorization interfaces | Proposed |
 | [0008](0008-credential-broker-and-audit-contracts.md) | Credential broker and audit contracts | Proposed |
 | [0009](0009-mcp-is-a-protocol-adapter.md) | MCP as a protocol adapter | Proposed |

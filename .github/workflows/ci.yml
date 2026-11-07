@@ -30,3 +30,4 @@ jobs:
         run: |
           cargo build --bin hostmarshal
           python3 tests/mcp_smoke.py
+          python3 tests/declarative_smoke.py

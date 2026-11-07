@@ -1,0 +1,8 @@
+apiVersion: hostmarshal.io/v1alpha1
+kind: Host
+metadata:
+  name: sample-linux
+  labels:
+    environment: staging
+spec:
+  address: sample-linux.example.invalid

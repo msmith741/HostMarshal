@@ -1,6 +1,6 @@
 # Adapter and plugin architecture
 
-**Status: PROPOSED.** No public adapter SDK or sandbox protocol currently exists.
+**Status:** ADR-0006 Accepted. No public adapter SDK or sandbox protocol currently exists; the implemented M1 operation is trusted static inventory only.
 
 ## Purpose
 

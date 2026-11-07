@@ -1,23 +1,55 @@
 use std::{env, path::Path};
 
-use anyhow::{Result, bail};
-use hostmarshal::{HostMarshal, config::Config};
+use anyhow::{Result, bail, ensure};
+use hostmarshal::{
+    HostMarshal, config::Config, declarative::CompiledConfig, dynamic_mcp::DeclarativeMcp,
+};
 use rmcp::{ServiceExt, transport::stdio};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Process arguments and configuration must come from a trusted launcher.
-    // Never allow a remote MCP client to choose a principal or configuration.
-    let mut args = env::args().skip(1);
-    let (Some(flag), Some(path), None) = (args.next(), args.next(), args.next()) else {
-        bail!("usage: hostmarshal --config <trusted-config.json>");
-    };
-    if flag != "--config" {
-        bail!("usage: hostmarshal --config <trusted-config.json>");
+    let args: Vec<String> = env::args().skip(1).collect();
+    match args.as_slice() {
+        [command, validate, directory] if command == "config" && validate == "validate" => {
+            let config = CompiledConfig::load(Path::new(directory))?;
+            eprintln!(
+                "valid configuration: {} hosts, {} capabilities, {} grants",
+                config.hosts.len(),
+                config.capabilities.len(),
+                config.grants.len()
+            );
+            Ok(())
+        }
+        [flag, directory, principal_flag, principal]
+            if flag == "--config-dir" && principal_flag == "--principal" =>
+        {
+            ensure!(
+                !principal.is_empty()
+                    && principal.len() <= 128
+                    && principal
+                        .bytes()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_')),
+                "invalid launcher principal"
+            );
+            // A trusted launcher must choose both directory and principal. MCP cannot change them.
+            let config = CompiledConfig::load(Path::new(directory))?;
+            let server = DeclarativeMcp::new(config, principal.clone())
+                .serve(stdio())
+                .await?;
+            server.waiting().await?;
+            Ok(())
+        }
+        [flag, path] if flag == "--config" => {
+            // Legacy pre-alpha JSON mode retained temporarily for migration.
+            let config = Config::load(Path::new(path))?;
+            let server = HostMarshal::new(config).serve(stdio()).await?;
+            server.waiting().await?;
+            Ok(())
+        }
+        _ => bail!(
+            "usage: hostmarshal config validate <directory> | \
+             hostmarshal --config-dir <directory> --principal <trusted-launcher-subject> | \
+             hostmarshal --config <legacy-config.json>"
+        ),
     }
-
-    let config = Config::load(Path::new(&path))?;
-    let server = HostMarshal::new(config).serve(stdio()).await?;
-    server.waiting().await?;
-    Ok(())
 }

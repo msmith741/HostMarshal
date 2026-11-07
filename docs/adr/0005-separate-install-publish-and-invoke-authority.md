@@ -1,8 +1,8 @@
 # ADR-0005: Separate install, publish and invoke authority
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-07
-- **Deciders:** Maintainers (pending review)
+- **Deciders:** Project maintainer (design review, 2026-11-07)
 
 ## Context
 
@@ -11,6 +11,12 @@ An AI agent may legitimately inspect a host but must not be able to install its 
 ## Decision
 
 Treat **installation** (approved code/operation permissions), **publication** (versioned capability manifests), and **invocation** (verified caller/target grants) as distinct administrative authorities and trust boundaries. They may be assigned to one administrator in small deployments but never become the same unchecked API operation. Client invocation cannot mutate executable configuration or its own authorization.
+
+## Acceptance clarifications
+
+- The role separation is a security invariance **even for single-admin local deployments**. M1 has no plugin installation or runtime grant-modification API; controlling file deployment remains a trusted OS/launcher responsibility.
+- Runtime callers cannot supply/modify identity, grants, configuration directories, or installation package paths through MCP. A capability's existence is never authorization.
+- Administrative installation, publication approvals, revocation and policy-change audit workflows require later dedicated implementation and test evidence.
 
 ## Alternatives considered
 

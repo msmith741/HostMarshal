@@ -1,6 +1,6 @@
 # Proposed architecture
 
-**Status:** proposed, not implemented. **Design goal:** transport independence, declarative capabilities, and security boundaries that apply to every adapter.
+**Status:** accepted design principles from ADR-0003–0006; only the limited M1 declarative inventory slice is implemented, not the full proposed architecture. **Design goal:** transport independence, declarative capabilities, and security boundaries that apply to every adapter.
 
 ## Logical diagram
 

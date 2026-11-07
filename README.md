@@ -2,42 +2,53 @@
 
 **Secure infrastructure operations through declarative capabilities and policy-controlled execution.**
 
-HostMarshal is a proposed open-source, vendor-neutral infrastructure operations platform. It is intended to let automation clients, AI agents, and administrators invoke **typed, scoped, auditable** actions against managed systems without handing them general-purpose shell, network, or credential access.
+HostMarshal is a vendor-neutral, pre-alpha Rust infrastructure capability gateway. It supports MCP over stdio and is being extended from an initial hard-coded inventory proof of concept into an independently configurable, security-governed execution engine.
 
-> **Project status: architecture/design phase; no production release.** The configuration examples and contracts under `docs/` and `examples/` are **proposals, not implemented interfaces**. The initial Rust proof of concept from [PR #1](https://github.com/msmith741/HostMarshal/pull/1) is now merged into main, but it is **not** the approved long-term architecture. Do not deploy the proof of concept as an infrastructure security boundary.
+> **Pre-alpha.** The declarative mode is limited to approved **static inventory observation**. It does **not** connect to hosts, invoke remote commands, load plugins, authenticate remote clients, broker secrets or provide durable auditing. Do not treat it as a production security boundary.
 
-## Principles
+## Declarative M1 slice
 
-1. **Vendor-neutral**: no built-in dependence on any single hypervisor, cloud, secret manager, network vendor, cluster, AI client, or private environment.
-2. **Declarative extensibility**: versioned YAML defines capabilities over **installed trusted operations**; configuration cannot manufacture privileges.
-3. **Separate trust authorities**: installing implementation code, publishing capabilities, and granting invocation rights are distinct actions.
-4. **Default deny**: identity, target, operation, and runtime restrictions are enforced in trusted code on every call.
-5. **Transport-independent core**: MCP is the initial integration, not the domain model.
-6. **Predictable execution**: typed inputs/results, hard limits, credential isolation, audit trails, negative-path tests.
-7. **Small, approachable deployments**: local CLI/stdio first; Kubernetes, Vault, and remote hosting remain optional.
+YAML resources under `config/v1alpha1/` define a fictional Host, a published Capability and an independent Grant. The capability references the compiled-in `builtin.inventory.inspect/v1` operation. The runtime validates resources before serving MCP and denies invocations without an exact matching local-launcher subject/capability/target grant.
 
-## Documentation index
+Requires Rust stable toolchain:
 
-- [Product requirements and non-goals](docs/PRODUCT.md)
-- [Architecture and execution flow](docs/ARCHITECTURE.md)
-- [Roadmap and milestone exit criteria](docs/ROADMAP.md)
-- [Configuration resources and validation](docs/CONFIGURATION.md)
-- [Capabilities, recipes, and extension model](docs/CAPABILITIES.md)
-- [Adapter and plugin contracts](docs/ADAPTERS.md)
-- [Security architecture and threat model](docs/SECURITY_ARCHITECTURE.md)
-- [Testing and release gates](docs/TEST_STRATEGY.md)
-- [Rust coding standards](docs/CODING_STANDARDS.md)
-- [Development workflow and ADR policy](docs/DEVELOPMENT_WORKFLOW.md)
-- [Architecture decision records](docs/adr/README.md)
-- [Proposed YAML examples](examples/proposed-v1alpha1/README.md)
-- [Contributor guide](CONTRIBUTING.md) · [Security reporting](SECURITY.md)
+~~~sh
+cargo test
+cargo run -- config validate config/v1alpha1
+cargo run -- --config-dir config/v1alpha1 --principal example-operator
+~~~
 
-## Extension philosophy
+To use stdio MCP, point a trusted client's MCP server configuration at the compiled binary with the same `--config-dir` and `--principal` launcher arguments. **The launcher must be trusted**: stdio does not authenticate an arbitrary MCP peer, and the principal must not be chosen by the remote tool request.
 
-**Capability definition** (YAML) describes a typed tool and references an immutable operation descriptor. **Implementation** (a built-in adapter or separately trusted plugin) determines what actually executes and its minimum privileges. **Authorization** determines whether a verified caller may invoke that operation against an eligible target. Changing one does not grant the others.
+Additional capability manifests can reuse the existing inventory operation under different names. The initial validated schema subset must match the installed operation exactly; an unknown operation, command field or privilege escalation attempt is rejected. This is the **first vertical slice**, not a general-purpose YAML workflow executor.
 
-Initial support targets read-only inventory, mocks, and constrained observations. Mutation, approvals, rich recipe composition, and third-party plugin execution require additional security work before release.
+## Legacy bootstrap compatibility
 
-## License
+The initial two static tools can still be exercised temporarily through:
 
-[Apache License 2.0](LICENSE).
+~~~sh
+cargo run -- --config config/example.json
+~~~
+
+Legacy JSON and new YAML are intentionally distinct; legacy configuration must not be interpreted as modern grants. A later migration will remove the bootstrap route.
+
+## Documentation
+
+- [Product requirements](docs/PRODUCT.md), [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md)
+- [Configuration](docs/CONFIGURATION.md), [Capabilities](docs/CAPABILITIES.md), [Adapters](docs/ADAPTERS.md)
+- [Security architecture](docs/SECURITY_ARCHITECTURE.md), [Coding standards](docs/CODING_STANDARDS.md)
+- [Traceability matrix](docs/TRACEABILITY.md), [ADRs](docs/adr/README.md)
+- [Test strategy](docs/TEST_STRATEGY.md), [Contributing](CONTRIBUTING.md), [Security policy](SECURITY.md)
+
+## Development
+
+~~~sh
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets --all-features
+cargo build --bin hostmarshal
+python3 tests/mcp_smoke.py
+python3 tests/declarative_smoke.py
+~~~
+
+Licensed under [Apache 2.0](LICENSE).
