@@ -36,21 +36,27 @@ impl HostMarshal {
 
 #[tool_router(server_handler)]
 impl HostMarshal {
-    #[tool(description = "List only hosts the configured principal can enumerate. Static inventory only; does not contact hosts.")]
+    #[tool(
+        description = "List only hosts the configured principal can enumerate. Static inventory only; does not contact hosts."
+    )]
     fn list_hosts(&self) -> String {
         serde_json::to_string(&self.policy.visible_hosts()).unwrap_or_else(|_| "[]".into())
     }
 
-    #[tool(description = "Read static inventory metadata for one authorized host. Does not execute commands or contact the host.")]
+    #[tool(
+        description = "Read static inventory metadata for one authorized host. Does not execute commands or contact the host."
+    )]
     fn get_host(&self, Parameters(args): Parameters<GetHostArgs>) -> CallToolResult {
         match self.policy.get_host(&args.host_id) {
             Some(host) => match serde_json::to_string(&host) {
                 Ok(data) => CallToolResult::success(vec![ContentBlock::text(data)]),
-                Err(_) => CallToolResult::error(vec![ContentBlock::text("unable to encode result")]),
+                Err(_) => {
+                    CallToolResult::error(vec![ContentBlock::text("unable to encode result")])
+                }
             },
-            None => CallToolResult::error(vec![ContentBlock::text(
-                "host not found or not authorized",
-            )]),
+            None => {
+                CallToolResult::error(vec![ContentBlock::text("host not found or not authorized")])
+            }
         }
     }
 }

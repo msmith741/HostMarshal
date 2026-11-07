@@ -1,5 +1,9 @@
 //! Trusted, local process configuration. Never accept this document over MCP.
-use std::{collections::{BTreeMap, HashSet}, fs, path::Path};
+use std::{
+    collections::{BTreeMap, HashSet},
+    fs,
+    path::Path,
+};
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -66,7 +70,10 @@ impl Config {
         }
         for grant in &self.grants {
             ensure!(valid_id(&grant.principal), "invalid grant principal");
-            ensure!(ids.contains(grant.host_id.as_str()), "grant references unknown host");
+            ensure!(
+                ids.contains(grant.host_id.as_str()),
+                "grant references unknown host"
+            );
         }
         Ok(())
     }
