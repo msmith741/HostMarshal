@@ -98,6 +98,9 @@ impl OperationAdapter for LinuxUname {
             if let Some(cert_path) = lease.certificate_path() {
                 // OpenSSH options MUST precede the destination and fixed command.
                 command
+                    // Vault-issued user certs must not fall back to raw-key auth.
+                    .arg("-o")
+                    .arg("PubkeyAcceptedAlgorithms=*-cert-v01@openssh.com")
                     .arg("-o")
                     .arg(format!("CertificateFile={}", cert_path.display()));
             }

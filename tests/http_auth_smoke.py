@@ -210,6 +210,15 @@ def main():
                 "jsonrpc": "2.0", "id": 8, "method": "tools/list",
                 "params": {"_meta": META},
             }, bearer=alice, origin="https://attacker.example.invalid")[0] in (401,403)
+            for invalid_origin in [
+                "https://mcp.example.invalid/extra-path",
+                "https://mcp.example.invalid/?invalid=1",
+                "https://mcp.example.invalid/#fragment",
+            ]:
+                assert request(port, "POST", payload={
+                    "jsonrpc": "2.0", "id": 8, "method": "tools/list",
+                    "params": {"_meta": META},
+                }, bearer=alice, origin=invalid_origin)[0] in (401,403)
             assert request(port, "POST", path="/mcp?access_token=fake",
                            payload={"jsonrpc":"2.0","id":9,"method":"tools/list",
                                     "params":{"_meta":META}}, bearer=alice)[0] == 401

@@ -31,11 +31,13 @@ async fn authenticate_request(
         .flatten()
         .and_then(|h| h.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "));
-    let origin_valid = match headers.get(header::ORIGIN) {
-        None => true,
-        Some(v) => v
-            .to_str()
-            .ok()
+    // An Origin is only a scheme/host/port tuple, never a full URL.
+    // Reject repeated headers and path/query/userinfo ambiguity.
+    let origin_valid = match headers.get_all(header::ORIGIN).iter().count() {
+        0 => true,
+        1 => headers
+            .get(header::ORIGIN)
+            .and_then(|h| h.to_str().ok())
             .and_then(|origin| url::Url::parse(origin).ok())
             .is_some_and(|origin| {
                 let Ok(resource) = url::Url::parse(verifier.resource()) else {
@@ -44,7 +46,13 @@ async fn authenticate_request(
                 origin.scheme() == resource.scheme()
                     && origin.host_str() == resource.host_str()
                     && origin.port_or_known_default() == resource.port_or_known_default()
+                    && origin.path() == "/"
+                    && origin.query().is_none()
+                    && origin.fragment().is_none()
+                    && origin.username().is_empty()
+                    && origin.password().is_none()
             }),
+        _ => false,
     };
     let caller = if origin_valid && request.uri().query().is_none() {
         auth.and_then(|bearer| verifier.authenticate(bearer).ok())

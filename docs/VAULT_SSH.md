@@ -50,7 +50,7 @@ Create a file outside the YAML manifest directory, e.g. `/etc/hostmarshal/vault-
 }
 ```
 
-Grant the caller `linux.uname` against the same trusted Host target, and configure `Host.spec.ssh.user: observer`, a verified `knownHostsFile` and destination. The role's principal and inventory login user must align.
+Grant the caller `linux.uname` against the same trusted Host target, and configure `Host.spec.ssh.user: observer`, a verified `knownHostsFile` and destination. The role's principal and inventory login user must align. When a Vault-issued certificate is used, the SSH client restricts accepted public-key algorithms to certificate variants, preventing silent fallback to raw authorized_keys. The target SSH server should also avoid authorizing this identity's raw key.
 
 Start either local stdio or authenticated HTTP with the **one** optional `--vault-ssh-config /etc/hostmarshal/vault-ssh.json` flag. Never provide it alongside `--ssh-credential-map`. Without a configured provider, requests requiring SSH credentials are denied.
 

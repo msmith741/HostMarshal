@@ -37,7 +37,6 @@ pub fn valid_remote_issuer(issuer: &str) -> bool {
         && url.password().is_none()
         && url.query().is_none()
         && url.fragment().is_none()
-        && !issuer.ends_with('/')
 }
 
 impl AuthenticatedCaller {
@@ -85,10 +84,12 @@ mod tests {
             "http://issuer.example.invalid",
             "https://user:pass@example.invalid",
             "https://example.invalid?ignored=1",
-            "https://example.invalid/",
         ] {
             assert!(!valid_remote_issuer(issuer));
         }
+        // OAuth issuers ending in a slash are valid; compare exactly.
+        assert!(valid_remote_issuer("https://example.invalid/"));
+        assert!(valid_remote_issuer("https://example.invalid/oauth2/default/"));
         let principal = AuthenticatedCaller::from_trusted_launcher("example-operator").unwrap();
         assert_eq!(principal.issuer(), "local://trusted-launcher");
         assert_eq!(

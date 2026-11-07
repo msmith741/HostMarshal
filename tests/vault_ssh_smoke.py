@@ -52,16 +52,17 @@ class VaultHandler(http.server.BaseHTTPRequestHandler):
             self.send_error(400)
             return
 
-        if self.broken_certificate:
-            signed = "untrusted DATA-WILL-BE-REJECTED"
-        else:
-            request_pub = self.server.test_folder / "issued.pub"
-            request_pub.write_text(body["public_key"])
-            command("ssh-keygen", "-q", "-s", str(self.ca_key),
-                    "-I", "m4-ci-credential", "-n", USER,
-                    "-V", "-5s:+65s", "-z", str(VaultHandler.calls),
-                    str(request_pub))
-            signed = (self.server.test_folder / "issued-cert.pub").read_text()
+        request_pub = self.server.test_folder / "issued.pub"
+        request_pub.write_text(body["public_key"])
+        signing_ca = (
+            self.server.test_folder / "rogue-ca"
+            if self.broken_certificate else self.ca_key
+        )
+        command("ssh-keygen", "-q", "-s", str(signing_ca),
+                "-I", "m4-ci-credential", "-n", USER,
+                "-V", "-5s:+65s", "-z", str(VaultHandler.calls),
+                str(request_pub))
+        signed = (self.server.test_folder / "issued-cert.pub").read_text()
 
         data = json.dumps({"data":{"signed_key":signed}, "lease_duration":60}).encode()
         self.send_response(200)
@@ -163,6 +164,8 @@ def main():
         sshd, ssh_port, known = start_cert_only_ssh(root)
         VaultHandler.ca_key = root / "vault-ca"
         VaultHandler.key_file = root / "client_key.pub"
+        command("ssh-keygen", "-q", "-t", "ed25519", "-N", "",
+                "-f", str(root / "rogue-ca"))
         vault, ca = start_vault(root)
         mapping, token = vault_mapping(root, vault.server_port, ca)
         config = root / "manifests"
@@ -185,11 +188,15 @@ def main():
                 assert denied.get("isError") is True
                 assert VaultHandler.calls == 1
 
-                # A corrupted Vault response cannot be used as a certificate.
+                # Even if the SSH server accidentally trusts the raw key,
+                # a rogue-CA certificate cannot fall back to raw-key auth.
+                authorized = root / "authorized_keys"
+                authorized.write_text((root / "client_key.pub").read_text())
                 VaultHandler.broken_certificate = True
                 bad_cert = mcp.tool("linux.uname", "sample-linux")
-                assert bad_cert.get("isError") is True
+                assert bad_cert.get("isError") is True, bad_cert
                 VaultHandler.broken_certificate = False
+                authorized.write_text("")
 
                 # Vault token rotation/revocation is enforced per acquisition.
                 token.write_text("invalid-rotated-token\n")
