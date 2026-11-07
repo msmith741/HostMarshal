@@ -19,7 +19,7 @@ const OPERATION: &str = "builtin.inventory.inspect/v1";
 const MAX_DEPTH: usize = 32;
 const MAX_NODES_PER_FILE: usize = 10_000;
 
-#[derive(Debug, Clone, Deserialize, Serialize, rmcp::schemars::JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Metadata {
     pub name: String,
@@ -27,26 +27,26 @@ pub struct Metadata {
     pub labels: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, rmcp::schemars::JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct HostSpec {
     pub address: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, rmcp::schemars::JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Exposure {
     pub mcp: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, rmcp::schemars::JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct Limits {
     pub timeout: String,
     pub max_output_bytes: usize,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, rmcp::schemars::JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct CapabilitySpec {
     pub operation_ref: String,
@@ -58,7 +58,7 @@ pub struct CapabilitySpec {
 }
 
 #[derive(
-    Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, rmcp::schemars::JsonSchema,
+    Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, schemars::JsonSchema,
 )]
 #[serde(deny_unknown_fields)]
 pub struct Subject {
@@ -67,7 +67,7 @@ pub struct Subject {
 }
 
 #[derive(
-    Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, rmcp::schemars::JsonSchema,
+    Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, schemars::JsonSchema,
 )]
 #[serde(deny_unknown_fields)]
 pub struct Targets {
@@ -76,7 +76,7 @@ pub struct Targets {
 }
 
 #[derive(
-    Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, rmcp::schemars::JsonSchema,
+    Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, schemars::JsonSchema,
 )]
 #[serde(deny_unknown_fields)]
 pub struct GrantSpec {
@@ -85,7 +85,7 @@ pub struct GrantSpec {
     pub targets: Targets,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, rmcp::schemars::JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub enum Resource {
     Host {

@@ -30,10 +30,10 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 
 ## Configuration hardening evidence
 
-- \`src/declarative.rs::parse_manifests\` applies explicit input size, document count, depth, node, event, anchor and alias budgets and rejects merge keys/custom tags. Exhaustive fuzzing remains deferred.
-- \`CompiledConfig::compile\` normalizes grant ordering before hashing the **effective configuration snapshot** with SHA-256. This digest is neither a signature nor independent proof of origin or executable provenance.
-- \`hostmarshal config schema\` exports machine-readable Draft 2020-12 JSON Schema generated from Serde resource types. It captures shape, not cross-resource security validation, operation allowlists or authorization.
-- \`hostmarshal config inspect\` returns resource counts and digest for trusted local operators without exposing inventory addresses.
+- `src/declarative.rs::parse_manifests` applies explicit input size, document count, depth, node, event, anchor and alias budgets and rejects merge keys/custom tags. Exhaustive fuzzing remains deferred.
+- `CompiledConfig::compile` normalizes grant ordering before hashing the **effective configuration snapshot** with SHA-256. This digest is neither a signature nor independent proof of origin or executable provenance.
+- `hostmarshal config schema` exports machine-readable Draft 2020-12 JSON Schema generated from Serde resource types. It captures shape, not cross-resource security validation, operation allowlists or authorization.
+- `hostmarshal config inspect` returns resource counts and digest for trusted local operators without exposing inventory addresses.
 - Rust unit and CLI smoke tests check parser rejection, hash stability under reordering, hash changes with grants, and parseability of the generated schema.
 - Secure atomic reload, external plugin digests, standalone published schemas and durable audit are **not implemented**.
 

@@ -80,7 +80,7 @@ hostmarshal policy explain --subject example-operator --capability inventory.ins
 
 The schema export is derived from the Rust resource types and is structural. Semantic validation of trusted operation IDs, cross-references, schema equality, and authorization still happens in trusted code. The SHA-256 digest is computed over the normalized **effective** snapshot and is not a signature or proof of source/binary integrity. The parser rejects anchors, aliases, merges and custom tags and applies explicit resource budgets. TOCTOU file-replacement risks remain for later secure deployment hardening.
 
-\`policy explain\` is an administrative diagnostic, not an identity-spoofing invocation interface; authorization and caller identity for that command must follow a separate trusted local context. Validation errors must identify file, resource, field, constraint and remediation without printing secrets.
+`policy explain` is an administrative diagnostic, not an identity-spoofing invocation interface; authorization and caller identity for that command must follow a separate trusted local context. Validation errors must identify file, resource, field, constraint and remediation without printing secrets.
 
 ## Backward compatibility and rollout
 

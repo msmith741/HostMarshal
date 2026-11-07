@@ -1,7 +1,7 @@
 //! JSON Schema for versioned declarative resources, generated from typed Rust.
 //! Editors may use this; semantic authorization validation remains in CompiledConfig.
 use anyhow::Result;
-use rmcp::schemars;
+use schemars;
 
 /// Generate a Draft 2020-12 JSON Schema for HostMarshal v1alpha1 resources.
 pub fn resource_schema_json() -> Result<String> {
