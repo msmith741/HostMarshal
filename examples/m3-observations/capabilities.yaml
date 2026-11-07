@@ -1,0 +1,98 @@
+{
+  "apiVersion": "hostmarshal.io/v1alpha1",
+  "kind": "Capability",
+  "metadata": {
+    "name": "linux.uname"
+  },
+  "spec": {
+    "operationRef": "builtin.linux.uname/v1",
+    "targetKind": "Host",
+    "exposure": {
+      "mcp": true
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "os": {
+          "type": "string",
+          "const": "Linux"
+        }
+      },
+      "required": [
+        "id",
+        "os"
+      ],
+      "additionalProperties": false
+    },
+    "limits": {
+      "timeout": "3s",
+      "maxOutputBytes": 4096
+    }
+  }
+}
+---
+{
+  "apiVersion": "hostmarshal.io/v1alpha1",
+  "kind": "Capability",
+  "metadata": {
+    "name": "https.health"
+  },
+  "spec": {
+    "operationRef": "builtin.https.health/v1",
+    "targetKind": "Host",
+    "exposure": {
+      "mcp": true
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "statusCode": {
+          "type": "integer"
+        },
+        "healthy": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "statusCode",
+        "healthy"
+      ],
+      "additionalProperties": false
+    },
+    "limits": {
+      "timeout": "3s",
+      "maxOutputBytes": 4096
+    }
+  }
+}

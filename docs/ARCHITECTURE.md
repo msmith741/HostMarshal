@@ -1,6 +1,6 @@
 # Proposed architecture
 
-**Status:** accepted ADR-0003–0008 design principles; M1 configuration and M2 security execution boundaries are implemented for **static inventory only**, not live infrastructure or untrusted plugins. **Design goal:** transport independence, declarative capabilities, and security boundaries that apply to every adapter.
+**Status:** accepted ADR-0003–0008 and ADR-0011 design principles; M3 adds two audited, bounded real observation adapters. Arbitrary remote execution, writes, remote MCP authentication and external plugins remain unavailable. **Design goal:** transport independence, declarative capabilities, and security boundaries that apply to every adapter.
 
 ## Logical diagram
 
@@ -80,7 +80,7 @@ This is a **target layout**, not a demand to create all crates immediately. Favo
 
 `src/runtime.rs` receives a verified local `AuthenticatedCaller`, acquires one immutable config snapshot, validates the operation/target/arguments, calls the `Authorizer`, commits pre-execution audit, requests an optional scoped credential, executes a typed trusted adapter under deadline/concurrency limits, validates its result and commits a terminal audit outcome. MCP has no direct adapter call. Stderr or optional protected file-backed JSON Lines records support audit of invocations; this is not tamper-evident. See [Execution Runtime](EXECUTION_RUNTIME.md) and [Audit](AUDIT.md).
 
-The old JSON-mode MCP handlers were **removed in M2** because they bypassed the coordinator. Both supported MCP wire eras now use the declarative pipeline. See [Migration](MIGRATION.md).
+The old JSON-mode MCP handlers were **removed in M2** because they bypassed the coordinator. M3's fixed SSH Linux identification and HTTPS health operations use the same authorization, broker, output validation and audit pipeline. Endpoint selection is from trusted inventory only; see [M3 deployment and threat boundaries](OBSERVATION_ADAPTERS.md). Both supported MCP wire eras now use the declarative pipeline. See [Migration](MIGRATION.md).
 
 ## Extension tiers
 

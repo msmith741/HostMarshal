@@ -1,0 +1,25 @@
+apiVersion: hostmarshal.io/v1alpha1
+kind: Grant
+metadata:
+  name: demo-linux-reader
+spec:
+  subjects:
+    - issuer: local://trusted-launcher
+      subject: operator
+  capabilities: [linux.uname]
+  targets:
+    kind: Host
+    names: [demo-linux]
+---
+apiVersion: hostmarshal.io/v1alpha1
+kind: Grant
+metadata:
+  name: demo-health-reader
+spec:
+  subjects:
+    - issuer: local://trusted-launcher
+      subject: operator
+  capabilities: [https.health]
+  targets:
+    kind: Host
+    names: [demo-https]

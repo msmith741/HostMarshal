@@ -1,6 +1,6 @@
 # Adapter and plugin architecture
 
-**Status:** ADR-0006 Accepted. The M2 Rust `OperationAdapter` trait and `OperationDescriptor` are implemented for **trusted in-process built-ins and test doubles only**. A public external plugin SDK and sandbox protocol do not yet exist.
+**Status:** ADR-0006 and ADR-0011 Accepted. The Rust `OperationAdapter` trait and trusted descriptors are implemented for static inventory plus two **vetted read-only SSH/HTTPS built-ins**. A public external plugin SDK and sandbox protocol do not yet exist.
 
 ## Purpose
 
@@ -21,7 +21,7 @@ pub trait OperationAdapter: Send + Sync {
 
 A trusted `OperationDescriptor` fixes operation ID, effect class, supported resource kind, maximum timeout and bytes, and any required credential purpose. The runtime creates `AdapterInvocation` with a resolved target from trusted inventory, validated input, and optionally an opaque scoped lease. The provider-neutral `CredentialBroker` contract is asynchronous and its request shares the adapter's absolute deadline; the lease scope must match the trusted operation, target and purpose exactly. The adapter cannot create the caller identity, policy permit, or audit event; those belong to the coordinator.
 
-A builtin adapter may return only the vetted static inventory output in M2. The coordinator double-checks that the returned content exactly matches the authorized target and fits the output budget. The only real installed implementation is `builtin.inventory.inspect/v1`, with **no network or shell execution**. Test-only adapters exercise failures and deadlines. Future external plugins require a separate OS-enforced sandbox and versioned protocol (M5).
+A builtin adapter may return only the vetted static inventory output in M2. The coordinator double-checks that the returned content exactly matches the authorized target and fits the output budget. The production registry now includes `builtin.inventory.inspect/v1`, `builtin.linux.uname/v1` and `builtin.https.health/v1`. They are not arbitrary scripts or HTTP requests. Linux runs only fixed `uname -s` through pinned-key OpenSSH; HTTPS probes only an approved host's `/health` endpoint without redirects or exposing bodies. Test doubles exercise failures and deadlines. Future external plugins require a separate OS-enforced sandbox and versioned protocol (M5). See [M3 observations](OBSERVATION_ADAPTERS.md).
 
 ## Required operation invariants
 

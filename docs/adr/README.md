@@ -1,6 +1,6 @@
 # Architecture decision records
 
-**Status:** ADR-0003 through ADR-0008 were reviewed and **Accepted** (0007–0008 during M2 on 2026-11-07) with explicit scope and security clarifications. ADR-0001, 0002, 0009, 0010 remain Proposed. Acceptance is a design decision, not proof that future controls are implemented.
+**Status:** ADR-0003–0008 and ADR-0011 are Accepted with explicit scope/security clarifications. ADR-0001, 0002, 0009 and 0010 remain Proposed. Acceptance is a design decision, not proof that future controls are implemented.
 
 | ID | Title | Status |
 | --- | --- | --- |
@@ -14,6 +14,7 @@
 | [0008](0008-credential-broker-and-audit-contracts.md) | Credential broker and audit contracts | Accepted |
 | [0009](0009-mcp-is-a-protocol-adapter.md) | MCP as a protocol adapter | Proposed |
 | [0010](0010-versioning-and-compatibility.md) | Versioning and compatibility | Proposed |
+| [0011](0011-readonly-network-observation.md) | Restricted read-only SSH/HTTPS network observation | Accepted |
 
 ## How to use ADRs
 

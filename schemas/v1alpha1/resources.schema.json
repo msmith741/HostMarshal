@@ -71,10 +71,51 @@
       "properties": {
         "address": {
           "type": "string"
+        },
+        "https": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HttpsEndpoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ssh": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SshEndpoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "address"
+      ],
+      "type": "object"
+    },
+    "HttpsEndpoint": {
+      "additionalProperties": false,
+      "properties": {
+        "caCertificateFile": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "port": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "port"
       ],
       "type": "object"
     },
@@ -112,6 +153,29 @@
       },
       "required": [
         "name"
+      ],
+      "type": "object"
+    },
+    "SshEndpoint": {
+      "additionalProperties": false,
+      "properties": {
+        "knownHostsFile": {
+          "type": "string"
+        },
+        "port": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "user": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "user",
+        "port",
+        "knownHostsFile"
       ],
       "type": "object"
     },
