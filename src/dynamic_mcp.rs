@@ -114,7 +114,7 @@ impl ServerHandler for DeclarativeMcp {
     async fn call_tool(
         &self,
         request: CallToolRequestParams,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
         // Intentionally do not short-circuit hidden tool names: the coordinator
         // must record denied invocations as well as successful ones.
