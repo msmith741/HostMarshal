@@ -106,15 +106,23 @@ def test_inspection_and_schema():
 
 
 def test_hardened_yaml_inputs():
-    for bad in (
-        "metadata: &alias {name: alpha}\n",
-        "metadata: !user alpha\n",
-        "metadata: {<<: {name: alpha}}\n",
-        "metadata: " + "[" * 40 + "x" + "]" * 40 + "\n",
-        "kind: Host\nkind: Grant\n",
-    ):
+    host = (EXAMPLE / "host.yaml").read_text()
+    with tempfile.TemporaryDirectory() as d:
+        (Path(d) / "host.yaml").write_text(host)
+        cli_validate(Path(d))
+    invalid = (
+        host.replace("name: sample-linux", "name: &id sample-linux"),
+        host.replace(
+            "environment: staging",
+            "environment: &env staging\n    alternate: *env",
+        ),
+        host.replace("name: sample-linux", "name: !custom sample-linux"),
+        host.replace("environment: staging", "<<: {environment: staging}"),
+        host.replace("kind: Host", "kind: Host\nkind: Host"),
+    )
+    for bad in invalid:
         with tempfile.TemporaryDirectory() as d:
-            (Path(d) / "invalid.yaml").write_text(bad)
+            (Path(d) / "host.yaml").write_text(bad)
             cli_validate(Path(d), success=False)
 
 

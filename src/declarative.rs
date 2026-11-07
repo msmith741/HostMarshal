@@ -539,12 +539,34 @@ spec: {address: alpha.example.invalid}
 
     #[test]
     fn hardened_yaml_parser_rejects_anchors_tags_and_excessive_depth() {
-        assert!(parse_manifests("kind: Host\nkind: Host\n").is_err());
-        assert!(parse_manifests("data: &anchor value\n").is_err());
-        assert!(parse_manifests("data: !unexpected value\n").is_err());
-        assert!(parse_manifests("data: { <<: {x: 1} }\n").is_err());
+        let host = r#"apiVersion: hostmarshal.io/v1alpha1
+kind: Host
+metadata:
+  name: alpha
+  labels:
+    environment: staging
+spec:
+  address: alpha.example.invalid
+"#;
+        assert!(parse_manifests(host).is_ok());
+        let anchors = host.replace("name: alpha", "name: &id alpha");
+        assert!(parse_manifests(&anchors).is_err());
+        let aliases = host.replace(
+            "environment: staging",
+            "environment: &env staging\n    alternate: *env",
+        );
+        assert!(parse_manifests(&aliases).is_err());
+        let tag = host.replace("name: alpha", "name: !custom alpha");
+        assert!(parse_manifests(&tag).is_err());
+        let merge = host.replace("environment: staging", "<<: {environment: staging}");
+        assert!(parse_manifests(&merge).is_err());
+        let duplicate = host.replace("name: alpha", "name: alpha\n  name: bravo");
+        assert!(parse_manifests(&duplicate).is_err());
+
+        // inputSchema is an untyped JSON value during parsing, so without
+        // parser structural budgets this valid Capability envelope could parse.
         let deep = format!(
-            "data: {}x{}",
+            "apiVersion: hostmarshal.io/v1alpha1\nkind: Capability\nmetadata: {{name: test}}\nspec:\n  operationRef: {OPERATION}\n  targetKind: Host\n  exposure: {{mcp: true}}\n  inputSchema: {}x{}\n  outputSchema: {{}}\n  limits: {{timeout: 2s, maxOutputBytes: 4096}}\n",
             "[".repeat(MAX_DEPTH + 2),
             "]".repeat(MAX_DEPTH + 2)
         );
