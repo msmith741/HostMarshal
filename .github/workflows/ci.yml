@@ -26,3 +26,7 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
         run: cargo test --all-targets --all-features
+      - name: Build and exercise MCP over stdio
+        run: |
+          cargo build --bin hostmarshal
+          python3 tests/mcp_smoke.py
