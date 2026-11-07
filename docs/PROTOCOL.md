@@ -1,6 +1,6 @@
 # Client protocols and identity
 
-**Status: PROPOSED.** MCP is a first-class transport **adapter**, not the authorization engine.
+**Status:** stdio MCP protocol adapter is implemented for a limited static inventory capability. The broader authenticated HTTP and multi-client architecture remains proposed.
 
 ## MCP posture
 
@@ -25,4 +25,13 @@ M1 uses immutable per-request snapshots. On a successful Unix SIGHUP, a new tool
 
 ## Protocol conformance testing
 
-Maintain fixtures for supported versions, tool discovery and invocation, JSON Schema validation, denial behavior, cache invalidation and error mapping. Legacy compatibility claims must be backed by CI evidence, not documentation or dependency version strings.
+HostMarshal tests **two distinct protocol eras** over actual stdio sessions in CI:
+
+| Era | Wire sequence | Test |
+| --- | --- | --- |
+| `2025-11-25` legacy | `initialize` → `notifications/initialized` → `tools/list` and `tools/call` | `tests/mcp_smoke.py`, `tests/declarative_smoke.py` |
+| `2026-07-28` stateless | `server/discover` → request-scoped `_meta` with protocol version and client capabilities → `tools/list`, `tools/call` | `tests/mcp_modern_smoke.py` |
+
+Both paths verify authorization boundaries; the modern test also checks no-cache private tool-catalog hints and schema presence. A successful SDK build alone is **not** counted as protocol conformance. The tests do not validate HTTP transports, OAuth, subscriptions, MRTR, or the complete upstream MCP conformance suite; those remain explicit future work.
+
+New transport implementations must reuse the same snapshot-aware policy and invocation coordinator, without accepting unverified caller metadata as identity.

@@ -13,6 +13,10 @@ Thanks for helping build a secure and general-purpose infrastructure operations 
 5. Keep examples fictional and self-contained: `example.invalid` hostnames, no organization-specific domains, IP ranges, credentials, or internal network descriptions.
 6. Do not add broad shell execution, generic user-supplied URLs, untrusted module loading, or permission bypasses.
 
+## Security regression and fuzzing
+
+When changing parsing, resource schemas, policy or MCP transport, update the relevant fixtures and traceability rows. Run `cargo test --locked --all-targets --all-features` for deterministic mutation coverage, and use the [fuzz harness](fuzz/README.md) for parser changes; promote any discovered crash to a stable regression test. New transport eras need a direct wire-level test that checks denial and no caller-identity spoofing.
+
 ## Review expectations
 
 - All externally visible contracts need documented compatibility/versioning impact.
