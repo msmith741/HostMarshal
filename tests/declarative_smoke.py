@@ -63,7 +63,64 @@ def cli_validate(directory, success=True):
     assert (p.returncode == 0) == success, p.stderr
 
 
+
+def test_inspection_and_schema():
+    inspection = subprocess.run(
+        [str(BIN), "config", "inspect", str(EXAMPLE)],
+        capture_output=True, text=True, timeout=10, check=True,
+    )
+    snapshot = json.loads(inspection.stdout)
+    assert snapshot["apiVersion"] == "hostmarshal.io/v1alpha1"
+    assert snapshot["snapshotDigest"].startswith("sha256:")
+    assert len(snapshot["snapshotDigest"]) == 71
+    assert snapshot["hosts"] == 1
+    assert snapshot["capabilities"] == 1
+    assert snapshot["grants"] == 1
+
+    schema = subprocess.run(
+        [str(BIN), "config", "schema"],
+        capture_output=True, text=True, timeout=10, check=True,
+    )
+    document = json.loads(schema.stdout)
+    assert document["$schema"] == "https://json-schema.org/draft/2020-12/schema"
+    assert all(kind in schema.stdout for kind in ("Host", "Grant", "Capability"))
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        for src in EXAMPLE.glob("*.yaml"):
+            (root / src.name).write_text(src.read_text())
+        before = json.loads(subprocess.check_output(
+            [str(BIN), "config", "inspect", str(root)], text=True
+        ))
+        (root / "grant.yaml").rename(root / "z-grant.yaml")
+        renamed = json.loads(subprocess.check_output(
+            [str(BIN), "config", "inspect", str(root)], text=True
+        ))
+        assert before["snapshotDigest"] == renamed["snapshotDigest"]
+        grant = root / "z-grant.yaml"
+        grant.write_text(grant.read_text().replace("example-operator", "another-operator"))
+        after = json.loads(subprocess.check_output(
+            [str(BIN), "config", "inspect", str(root)], text=True
+        ))
+        assert before["snapshotDigest"] != after["snapshotDigest"]
+
+
+def test_hardened_yaml_inputs():
+    for bad in (
+        "metadata: &alias {name: alpha}\n",
+        "metadata: !user alpha\n",
+        "metadata: {<<: {name: alpha}}\n",
+        "metadata: " + "[" * 40 + "x" + "]" * 40 + "\n",
+        "kind: Host\nkind: Grant\n",
+    ):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "invalid.yaml").write_text(bad)
+            cli_validate(Path(d), success=False)
+
+
 if __name__ == "__main__":
+    test_inspection_and_schema()
+    test_hardened_yaml_inputs()
     cli_validate(EXAMPLE)
     session(EXAMPLE, "example-operator", {"inventory.inspect"})
     session(EXAMPLE, "unauthorized-subject", set())
