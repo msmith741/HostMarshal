@@ -49,8 +49,15 @@ async fn main() -> Result<()> {
             Ok(())
         }
         [
-            policy, explain, directory, subject_flag, subject, capability_flag, capability,
-            target_flag, target,
+            policy,
+            explain,
+            directory,
+            subject_flag,
+            subject,
+            capability_flag,
+            capability,
+            target_flag,
+            target,
         ] if policy == "policy"
             && explain == "explain"
             && subject_flag == "--subject"
