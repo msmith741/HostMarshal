@@ -89,7 +89,9 @@ mod tests {
         }
         // OAuth issuers ending in a slash are valid; compare exactly.
         assert!(valid_remote_issuer("https://example.invalid/"));
-        assert!(valid_remote_issuer("https://example.invalid/oauth2/default/"));
+        assert!(valid_remote_issuer(
+            "https://example.invalid/oauth2/default/"
+        ));
         let principal = AuthenticatedCaller::from_trusted_launcher("example-operator").unwrap();
         assert_eq!(principal.issuer(), "local://trusted-launcher");
         assert_eq!(
