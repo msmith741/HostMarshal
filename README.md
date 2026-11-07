@@ -24,6 +24,21 @@ To use stdio MCP, point a trusted client's MCP server configuration at the compi
 
 Additional capability manifests can reuse the existing inventory operation under different names. The initial validated schema subset must match the installed operation exactly; the parser uses explicit resource budgets. A SHA-256 digest identifies the effective validated configuration, but it is **not** a signature or trusted-source proof. The generated JSON Schema covers resource structure rather than semantic authorization; an unknown operation, command field or privilege escalation attempt is rejected. This is the **first vertical slice**, not a general-purpose YAML workflow executor.
 
+## Unix reload and revocation (pre-alpha)
+
+Only a **trusted OS administrator** should control the HostMarshal process and its config directory. While a declarative stdio server is running:
+
+~~~sh
+# Validate your full staged config separately before signaling a live process
+hostmarshal config validate /protected/config
+kill -HUP <hostmarshal-pid>   # validated reload; atomic in-memory publish
+kill -USR1 <hostmarshal-pid>  # emergency deny new tool discovery/calls
+~~~
+
+A successful reload applies changed grants to newly starting calls; already-started static inventory requests may finish on their original immutable snapshot. An invalid reload retains the previous valid config, so an urgent revocation requires `SIGUSR1` or stopping the process. A valid SIGHUP is required to recover from lockdown. File ownership and OS signal permissions are the current control plane; **MCP clients cannot change configuration or trigger reload**. Unix signals are unavailable on Windows; restart is required there.
+
+This does not provide cryptographic caller authentication, durable audit, atomic on-disk configuration deployment, or cancellation/revocation guarantees for future live adapters. See [Security Architecture](docs/SECURITY_ARCHITECTURE.md).
+
 ## Legacy bootstrap compatibility
 
 The initial two static tools can still be exercised temporarily through:
@@ -51,6 +66,7 @@ cargo test --locked --all-targets --all-features
 cargo build --locked --bin hostmarshal
 python3 tests/mcp_smoke.py
 python3 tests/declarative_smoke.py
+python3 tests/reload_smoke.py  # Unix only
 # Additional schema drift and independent validation run in CI
 ~~~
 

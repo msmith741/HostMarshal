@@ -19,6 +19,10 @@ Target the stable [MCP 2026-07-28 specification](https://modelcontextprotocol.io
 - **authenticated MCP HTTP later:** strict audience/issuer verification, TLS, origin/CSRF/DNS rebinding protections where applicable, network restrictions, timeouts and per-identity rates.
 - **CLI:** direct invocations share the same validated security context, registry and runtime; a policy-explanation command may not impersonate a runtime caller.
 
+## Policy changes during a stdio connection
+
+M1 uses immutable per-request snapshots. On a successful Unix SIGHUP, a new tool discovery request returns the updated, authorization-filtered catalog. The SDK's catalog advertises private caching with `ttlMs: 0`; clients must not retain previously discovered capabilities as authorization. `tools/call` always checks the current snapshot even if a client submits a tool name it discovered earlier.
+
 ## Protocol conformance testing
 
 Maintain fixtures for supported versions, tool discovery and invocation, JSON Schema validation, denial behavior, cache invalidation and error mapping. Legacy compatibility claims must be backed by CI evidence, not documentation or dependency version strings.

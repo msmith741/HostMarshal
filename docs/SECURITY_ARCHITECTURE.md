@@ -65,11 +65,21 @@ HTTP GET can mutate state; arbitrary read-only declarations are **not** a safety
 | Credential backend unavailable | Do not fall back to long-lived broad secrets |
 | Output/log contains secret | Redact/classify; never log raw auth headers or tokens |
 | Audit sink fails during privileged operation | Defined fail-closed pre-execution commitment for mandatory-audit classes |
-| Config reload partially fails | Atomic snapshot; separate emergency-deny path for revocation |
+| Config reload partially fails | Atomic in-memory activation after full validation; SIGUSR1 emergency-deny on Unix or stop the process |
 
 ## Operation classes
 
 Observe → Diagnose → Mutate → Privileged → Destructive. These are design classifications; the initial implementation is limited to vetted static inventory and mock observation. State-changing support requires its own ADR and per-invocation approval bound to exact actor, target, operation and arguments; neither a generic authorization nor a model confirmation message is an adequate privileged approval mechanism.
+
+## Implemented local reload and revocation boundary (M1)
+
+The Unix stdio service can handle OS-protected signals: **SIGHUP** compiles the complete trusted configuration directory and atomically replaces the active in-memory snapshot on success; **SIGUSR1** disables all tool enumeration and invocation for new requests. Only a subsequent valid SIGHUP or trusted process restart can re-enable operations.
+
+A rejected SIGHUP retains the previous validated snapshot. If that snapshot includes permissions that urgently require revocation, the operator **must issue SIGUSR1 or stop the process**; a malformed staged config is not a revocation mechanism. Signal permission is governed by the host OS, and all processes running as the same OS user may generally signal each other, so the deployment identity must not be shared with untrusted workloads.
+
+M1 requests use one immutable snapshot acquired at request start. Already-started static inventory reads may complete using that snapshot; a successful revocation applies to requests that **start after** the replacement is activated. Side-effecting adapters are still prohibited until interruption and reauthorization at effect boundaries are implemented. No persistent audit of signal provenance exists.
+
+The directory loader currently reads several files in sequence. It does **not** prove filesystem-level transactionality or prevent privileged same-user file replacement races. Stage a complete validated config in a separate protected directory, use an OS-controlled atomic rename or symlink promotion as appropriate, and then signal reload. No client may submit an arbitrary directory or grant change through MCP.
 
 ## Residual risks
 

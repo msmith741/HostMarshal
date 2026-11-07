@@ -12,20 +12,20 @@ use rmcp::{
 };
 use serde_json::Value;
 
-use crate::declarative::{CompiledConfig, PublishedCapability};
+use crate::{
+    declarative::{CompiledConfig, PublishedCapability},
+    snapshot::ConfigStore,
+};
 
 #[derive(Clone)]
 pub struct DeclarativeMcp {
-    config: Arc<CompiledConfig>,
+    store: Arc<ConfigStore>,
     principal: String,
 }
 
 impl DeclarativeMcp {
-    pub fn new(config: CompiledConfig, principal: String) -> Self {
-        Self {
-            config: Arc::new(config),
-            principal,
-        }
+    pub fn new(store: Arc<ConfigStore>, principal: String) -> Self {
+        Self { store, principal }
     }
 
     fn definition(&self, cap: &PublishedCapability) -> Tool {
@@ -39,9 +39,9 @@ impl DeclarativeMcp {
         .with_raw_output_schema(Arc::new(output))
     }
 
-    fn authorized_tool(&self, name: &str) -> Option<Tool> {
-        let cap = self.config.capabilities.get(name)?;
-        self.config
+    fn authorized_tool(&self, snapshot: &CompiledConfig, name: &str) -> Option<Tool> {
+        let cap = snapshot.capabilities.get(name)?;
+        snapshot
             .visible_capabilities(&self.principal)
             .iter()
             .any(|visible| visible.name == name)
@@ -57,7 +57,8 @@ impl ServerHandler for DeclarativeMcp {
     }
 
     fn get_tool(&self, name: &str) -> Option<Tool> {
-        self.authorized_tool(name)
+        let snapshot = self.store.snapshot()?;
+        self.authorized_tool(&snapshot, name)
     }
 
     async fn list_tools(
@@ -66,11 +67,16 @@ impl ServerHandler for DeclarativeMcp {
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
         let tools = self
-            .config
-            .visible_capabilities(&self.principal)
-            .into_iter()
-            .map(|cap| self.definition(cap))
-            .collect();
+            .store
+            .snapshot()
+            .map(|snapshot| {
+                snapshot
+                    .visible_capabilities(&self.principal)
+                    .into_iter()
+                    .map(|cap| self.definition(cap))
+                    .collect()
+            })
+            .unwrap_or_default();
         Ok(ListToolsResult::with_all_items(tools)
             .with_ttl_ms(0)
             .with_cache_scope(CacheScope::Private))
@@ -83,14 +89,22 @@ impl ServerHandler for DeclarativeMcp {
     ) -> Result<CallToolResponse, McpError> {
         // Do not disclose whether a hidden/unapproved capability exists.
         let name = request.name.as_ref();
-        if self.authorized_tool(name).is_none() {
+        // Evaluate visibility and invoke against the *same* snapshot to prevent
+        // mixing policy from one generation with inventory from another.
+        let Some(snapshot) = self.store.snapshot() else {
+            return Ok(CallToolResult::error(vec![rmcp::model::ContentBlock::text(
+                "capability not found or not authorized",
+            )])
+            .into());
+        };
+        if self.authorized_tool(&snapshot, name).is_none() {
             return Ok(CallToolResult::error(vec![rmcp::model::ContentBlock::text(
                 "capability not found or not authorized",
             )])
             .into());
         }
         let args = Value::Object(request.arguments.unwrap_or_default());
-        let result = match self.config.invoke(&self.principal, name, args) {
+        let result = match snapshot.invoke(&self.principal, name, args) {
             Ok(data) => CallToolResult::structured(data),
             Err(_) => CallToolResult::error(vec![rmcp::model::ContentBlock::text(
                 "input invalid or target not authorized",

@@ -40,3 +40,4 @@ jobs:
           cargo build --locked --bin hostmarshal
           python3 tests/mcp_smoke.py
           python3 tests/declarative_smoke.py
+          python3 tests/reload_smoke.py
