@@ -12,6 +12,7 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use crate::{adapter, transport::{SshEndpoint, HttpsEndpoint, validate_transport}};
 
 const MAX_FILE_BYTES: u64 = 128 * 1024;
 const MAX_FILES: usize = 128;
@@ -33,6 +34,10 @@ pub struct Metadata {
 #[serde(deny_unknown_fields)]
 pub struct HostSpec {
     pub address: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ssh: Option<SshEndpoint>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub https: Option<HttpsEndpoint>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
@@ -123,6 +128,7 @@ pub struct PublishedCapability {
     pub input_schema: Value,
     pub output_schema: Value,
     pub max_output_bytes: usize,
+    pub timeout_ms: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -141,25 +147,10 @@ fn valid_name(s: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_'))
 }
 
-pub fn input_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {"target": {"type": "string"}},
-        "required": ["target"],
-        "additionalProperties": false
-    })
-}
+pub fn input_schema() -> Value { adapter::trusted_input_schema() }
 
 pub fn output_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "id": {"type": "string"},
-            "hostname": {"type": "string"}
-        },
-        "required": ["id", "hostname"],
-        "additionalProperties": false
-    })
+    adapter::trusted_output_schema(OPERATION).expect("built-in descriptor must have schema")
 }
 
 /// Parse a resource-budgeted YAML stream without aliases, anchors or custom tags.
@@ -251,6 +242,7 @@ impl CompiledConfig {
                         "duplicate Host"
                     );
                     ensure!(!spec.address.trim().is_empty(), "empty host address");
+                    validate_transport(&spec.address, spec.ssh.as_ref(), spec.https.as_ref())?;
                     hosts.insert(metadata.name.clone(), HostRecord { metadata, spec });
                 }
                 Resource::Capability {
@@ -267,24 +259,25 @@ impl CompiledConfig {
                         used_names.insert(("Capability", metadata.name.clone())),
                         "duplicate Capability"
                     );
-                    // In the initial release, the schema MUST equal the trusted descriptor.
-                    // Subtyping / arbitrary schema narrowing will require a separate review.
+                    // Schema/limits are derived from compiled-in vetted descriptors;
+                    // manifest authors cannot publish executable code or relax risk.
+                    let desc = adapter::descriptor(&spec.operation_ref)
+                        .ok_or_else(|| anyhow::anyhow!("unknown/unapproved operationRef"))?;
+                    ensure!(spec.target_kind == desc.supported_target_kind, "unsupported target kind");
+                    ensure!(spec.input_schema == adapter::trusted_input_schema(),
+                        "input schema cannot override trusted operation");
+                    let trusted_output = adapter::trusted_output_schema(desc.id)
+                        .ok_or_else(|| anyhow::anyhow!("missing trusted output schema"))?;
+                    ensure!(spec.output_schema == trusted_output,
+                        "output schema cannot override trusted operation");
+                    let seconds: u64 = spec.limits.timeout.strip_suffix('s')
+                        .ok_or_else(|| anyhow::anyhow!("invalid operation timeout"))?
+                        .parse().context("invalid numeric operation timeout")?;
+                    ensure!(seconds > 0 && seconds <= desc.max_timeout.as_secs(),
+                        "operation timeout exceeds trusted maximum");
                     ensure!(
-                        spec.operation_ref == OPERATION,
-                        "unknown/unapproved operationRef"
-                    );
-                    ensure!(spec.target_kind == "Host", "unsupported target kind");
-                    ensure!(
-                        spec.input_schema == input_schema(),
-                        "input schema cannot override trusted operation"
-                    );
-                    ensure!(
-                        spec.output_schema == output_schema(),
-                        "output schema cannot override trusted operation"
-                    );
-                    ensure!(spec.limits.timeout == "2s", "unsupported operation timeout");
-                    ensure!(
-                        spec.limits.max_output_bytes > 0 && spec.limits.max_output_bytes <= 4096,
+                        spec.limits.max_output_bytes > 0
+                            && spec.limits.max_output_bytes <= desc.max_output_bytes,
                         "invalid output limit"
                     );
                     if spec.exposure.mcp {
@@ -296,6 +289,7 @@ impl CompiledConfig {
                                 input_schema: spec.input_schema,
                                 output_schema: spec.output_schema,
                                 max_output_bytes: spec.limits.max_output_bytes,
+                                timeout_ms: seconds * 1000,
                             },
                         );
                     }
@@ -339,6 +333,24 @@ impl CompiledConfig {
                 ensure!(hosts.contains_key(name), "grant references unknown host");
             }
         }
+        // A published operation can only be granted to a compatible typed
+        // inventory target. No client-provided endpoint fallback is allowed.
+        for grant in &grants {
+            for capability in &grant.capabilities {
+                let op = &capabilities[capability].operation_ref;
+                for target in &grant.targets.names {
+                    let host = &hosts[target];
+                    ensure!(
+                        op != "builtin.linux.uname/v1" || host.spec.ssh.is_some(),
+                        "SSH capability granted to target lacking SSH transport"
+                    );
+                    ensure!(
+                        op != "builtin.https.health/v1" || host.spec.https.is_some(),
+                        "HTTPS capability granted to target lacking HTTPS transport"
+                    );
+                }
+            }
+        }
         // These collections are set-like: canonical ordering prevents a harmless
         // YAML file or grant-list reorder from changing the effective snapshot ID.
         for grant in &mut grants {
@@ -348,7 +360,7 @@ impl CompiledConfig {
         }
         grants.sort();
         let canonical =
-            serde_json::to_vec(&(API_VERSION, OPERATION, &hosts, &capabilities, &grants))?;
+            serde_json::to_vec(&(API_VERSION, &hosts, &capabilities, &grants))?;
         let mut hash = Sha256::new();
         hash.update(b"hostmarshal-snapshot-v1\0");
         hash.update(canonical);

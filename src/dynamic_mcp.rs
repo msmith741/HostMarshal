@@ -33,7 +33,7 @@ impl DeclarativeMcp {
         let output = cap.output_schema.as_object().cloned().unwrap_or_default();
         Tool::new(
             cap.name.clone(),
-            "Read authorized static inventory metadata (no network or process execution)",
+            "Execute a bounded, authorized observation of a trusted inventory target",
             Arc::new(input),
         )
         .with_raw_output_schema(Arc::new(output))

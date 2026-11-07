@@ -7,6 +7,8 @@ pub mod credentials;
 pub mod declarative;
 pub mod dynamic_mcp;
 pub mod identity;
+pub mod observation;
 pub mod runtime;
 pub mod schema;
 pub mod snapshot;
+pub mod transport;

@@ -1,27 +1,17 @@
-//! Typed adapter contracts and the only production M2 operation (FR-006/FR-007).
-//! Only trusted built-in code is registered; no native or external plugin loader.
+//! Trusted built-in observation operation registry (FR-006/FR-007, ADR-0006).
+//! No runtime-loaded plugins, arbitrary commands or arbitrary HTTP URLs.
 use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use serde_json::{Value, json};
 
-use crate::credentials::CredentialLease;
+use crate::{credentials::CredentialLease, transport::{SshEndpoint, HttpsEndpoint}};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EffectClass {
-    Observe,
-    Diagnose,
-    Mutate,
-    Privileged,
-    Destructive,
-}
+pub enum EffectClass { Observe, Diagnose, Mutate, Privileged, Destructive }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CredentialRequirement {
-    None,
-    Scoped { purpose: &'static str },
-}
+pub enum CredentialRequirement { None, Scoped { purpose: &'static str } }
 
-/// The trusted adapter descriptor cannot be overridden through capability YAML.
 #[derive(Clone, Copy, Debug)]
 pub struct OperationDescriptor {
     pub id: &'static str,
@@ -40,13 +30,70 @@ pub const INVENTORY_INSPECT: OperationDescriptor = OperationDescriptor {
     max_output_bytes: 4096,
     credential: CredentialRequirement::None,
 };
+pub const LINUX_UNAME: OperationDescriptor = OperationDescriptor {
+    id: "builtin.linux.uname/v1",
+    effects: EffectClass::Observe,
+    supported_target_kind: "Host",
+    max_timeout: Duration::from_secs(5),
+    max_output_bytes: 4096,
+    credential: CredentialRequirement::Scoped { purpose: "ssh-observe" },
+};
+pub const HTTPS_HEALTH: OperationDescriptor = OperationDescriptor {
+    id: "builtin.https.health/v1",
+    effects: EffectClass::Observe,
+    supported_target_kind: "Host",
+    max_timeout: Duration::from_secs(5),
+    max_output_bytes: 4096,
+    credential: CredentialRequirement::None,
+};
 
-/// An inventory-resolved, trusted target. These fields are never taken from tool
-/// arguments except by looking up a stable ID in a validated snapshot.
+/// Only operations compiled and audited into HostMarshal can be bound by YAML.
+pub fn descriptor(id: &str) -> Option<&'static OperationDescriptor> {
+    match id {
+        "builtin.inventory.inspect/v1" => Some(&INVENTORY_INSPECT),
+        "builtin.linux.uname/v1" => Some(&LINUX_UNAME),
+        "builtin.https.health/v1" => Some(&HTTPS_HEALTH),
+        _ => None,
+    }
+}
+
+/// Common input: one opaque inventory ID. No command, path, method, URL, or shell.
+pub fn trusted_input_schema() -> Value {
+    json!({
+        "type":"object",
+        "properties":{"target":{"type":"string"}},
+        "required":["target"],
+        "additionalProperties":false
+    })
+}
+
+pub fn trusted_output_schema(id: &str) -> Option<Value> {
+    match id {
+        "builtin.inventory.inspect/v1" => Some(json!({
+            "type":"object",
+            "properties":{"id":{"type":"string"},"hostname":{"type":"string"}},
+            "required":["id","hostname"],"additionalProperties":false
+        })),
+        "builtin.linux.uname/v1" => Some(json!({
+            "type":"object",
+            "properties":{"id":{"type":"string"},"os":{"type":"string","const":"Linux"}},
+            "required":["id","os"],"additionalProperties":false
+        })),
+        "builtin.https.health/v1" => Some(json!({
+            "type":"object",
+            "properties":{"id":{"type":"string"},"statusCode":{"type":"integer"},"healthy":{"type":"boolean"}},
+            "required":["id","statusCode","healthy"],"additionalProperties":false
+        })),
+        _ => None,
+    }
+}
+
 #[derive(Debug)]
 pub struct ResolvedTarget {
     pub id: String,
     pub address: String,
+    pub ssh: Option<SshEndpoint>,
+    pub https: Option<HttpsEndpoint>,
 }
 
 pub struct AdapterInvocation {
@@ -56,23 +103,16 @@ pub struct AdapterInvocation {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AdapterFailure {
-    Unavailable,
-    Rejected,
-    Failed,
-}
+pub enum AdapterFailure { Unavailable, Rejected, Failed }
 
 pub trait OperationAdapter: Send + Sync {
     fn descriptor(&self) -> &'static OperationDescriptor;
-
     fn execute(
         &self,
-        invocation: AdapterInvocation,
+        request: AdapterInvocation,
     ) -> Pin<Box<dyn Future<Output = Result<Value, AdapterFailure>> + Send + '_>>;
 }
 
-/// Registration is a privileged, compile-time trusted composition action.
-/// It is deliberately not exposed to MCP clients or configuration YAML.
 pub struct TrustedAdapterCatalog {
     adapters: BTreeMap<&'static str, Arc<dyn OperationAdapter>>,
 }
@@ -81,13 +121,13 @@ impl TrustedAdapterCatalog {
     pub fn builtin() -> Self {
         let mut adapters: BTreeMap<&'static str, Arc<dyn OperationAdapter>> = BTreeMap::new();
         adapters.insert(INVENTORY_INSPECT.id, Arc::new(InventoryInspect));
+        adapters.insert(LINUX_UNAME.id, Arc::new(crate::observation::LinuxUname));
+        adapters.insert(HTTPS_HEALTH.id, Arc::new(crate::observation::HttpsHealth));
         Self { adapters }
     }
-
     pub fn resolve(&self, operation_id: &str) -> Option<Arc<dyn OperationAdapter>> {
         self.adapters.get(operation_id).cloned()
     }
-
     #[cfg(test)]
     pub(crate) fn with_test_adapter(adapter: Arc<dyn OperationAdapter>) -> Self {
         let mut catalog = Self::builtin();
@@ -96,26 +136,15 @@ impl TrustedAdapterCatalog {
     }
 }
 
-/// Built-in observation only. No network, child process, secret or host execution.
 struct InventoryInspect;
-
 impl OperationAdapter for InventoryInspect {
-    fn descriptor(&self) -> &'static OperationDescriptor {
-        &INVENTORY_INSPECT
-    }
-
-    fn execute(
-        &self,
-        request: AdapterInvocation,
-    ) -> Pin<Box<dyn Future<Output = Result<Value, AdapterFailure>> + Send + '_>> {
+    fn descriptor(&self) -> &'static OperationDescriptor { &INVENTORY_INSPECT }
+    fn execute(&self, request: AdapterInvocation)
+        -> Pin<Box<dyn Future<Output = Result<Value, AdapterFailure>> + Send + '_>>
+    {
         Box::pin(async move {
-            if request.lease.is_some() {
-                return Err(AdapterFailure::Rejected);
-            }
-            Ok(json!({
-                "id": request.target.id,
-                "hostname": request.target.address,
-            }))
+            if request.lease.is_some() { return Err(AdapterFailure::Rejected); }
+            Ok(json!({"id":request.target.id,"hostname":request.target.address}))
         })
     }
 }

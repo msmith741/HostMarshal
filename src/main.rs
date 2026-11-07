@@ -6,7 +6,7 @@ use anyhow::{Result, bail};
 use hostmarshal::{
     audit::{AuditSink, JsonlFileAudit, StderrAudit},
     authorization::{AuthorizationRequest, Authorizer, GrantAuthorizer},
-    credentials::DenyCredentialBroker,
+    credentials::{CredentialBroker, DenyCredentialBroker, LocalSshKeyBroker},
     declarative::CompiledConfig,
     dynamic_mcp::DeclarativeMcp,
     identity::AuthenticatedCaller,
@@ -99,23 +99,24 @@ async fn main() -> Result<()> {
             );
             Ok(())
         }
-        [flag, directory, principal_flag, principal]
+        [flag, directory, principal_flag, principal, rest @ ..]
             if flag == "--config-dir" && principal_flag == "--principal" =>
         {
-            serve_declarative(directory, principal, None).await
-        }
-        [
-            flag,
-            directory,
-            principal_flag,
-            principal,
-            audit_flag,
-            audit_path,
-        ] if flag == "--config-dir"
-            && principal_flag == "--principal"
-            && audit_flag == "--audit-log" =>
-        {
-            serve_declarative(directory, principal, Some(audit_path)).await
+            let mut audit_path = None;
+            let mut ssh_map = None;
+            let mut remaining = rest;
+            while !remaining.is_empty() {
+                let [option, value, tail @ ..] = remaining else {
+                    bail!("expected a value after a server option");
+                };
+                match option.as_str() {
+                    "--audit-log" if audit_path.is_none() => audit_path = Some(value.as_str()),
+                    "--ssh-credential-map" if ssh_map.is_none() => ssh_map = Some(value.as_str()),
+                    _ => bail!("unknown or duplicate server option"),
+                };
+                remaining = tail;
+            }
+            serve_declarative(directory, principal, audit_path, ssh_map).await
         }
         _ => bail!(
             "usage: hostmarshal config validate <directory> | \
@@ -124,7 +125,8 @@ async fn main() -> Result<()> {
              hostmarshal policy explain <directory> --subject <launcher-subject> \
                  --capability <name> --target <host-id> | \
              hostmarshal --config-dir <directory> --principal <trusted-launcher-subject> \
-             [--audit-log <protected-file-path>] | \
+             [--audit-log <protected-file-path>] \
+             [--ssh-credential-map <protected-json-file>] | \
              Use YAML resources; legacy --config JSON mode has been retired"
         ),
     }
@@ -134,6 +136,7 @@ async fn serve_declarative(
     directory: &str,
     principal: &str,
     audit_path: Option<&str>,
+    ssh_map: Option<&str>,
 ) -> Result<()> {
     // Caller identity and audit destination are bound by the trusted launcher.
     // No MCP message can choose or modify either value.
@@ -144,9 +147,13 @@ async fn serve_declarative(
         Some(path) => Arc::new(JsonlFileAudit::open(Path::new(path))?),
         None => Arc::new(StderrAudit),
     };
+    let broker: Arc<dyn CredentialBroker> = match ssh_map {
+        Some(path) => Arc::new(LocalSshKeyBroker::load(Path::new(path))?),
+        None => Arc::new(DenyCredentialBroker),
+    };
     let runtime = Arc::new(ExecutionCoordinator::new(
         Arc::clone(&store),
-        Arc::new(DenyCredentialBroker),
+        broker,
         audit,
     ));
     #[cfg(unix)]

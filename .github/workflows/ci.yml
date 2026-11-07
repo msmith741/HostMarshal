@@ -20,6 +20,15 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: M3 bootstrap generated artifacts
+        run: |
+          cargo generate-lockfile
+          echo 'M3_LOCK_BEGIN'
+          base64 -w0 Cargo.lock | fold -w 120 | sed 's/^/M3_LOCK64 /'
+          echo 'M3_LOCK_END'
+          echo 'M3_SCHEMA_BEGIN'
+          cargo run --quiet -- config schema | sed 's/^/M3_SCHEMA_LINE /'
+          echo 'M3_SCHEMA_END'
       - name: Enforce locked dependency resolution
         run: cargo metadata --locked --format-version 1 > /dev/null
       - name: Check formatting

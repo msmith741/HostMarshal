@@ -22,7 +22,7 @@ use crate::{
     audit::{AuditContext, AuditEvent, AuditPhase, AuditSink},
     authorization::{AuthorizationRequest, Authorizer, GrantAuthorizer},
     credentials::{CredentialBroker, CredentialScope},
-    declarative::{input_schema, output_schema},
+    declarative::input_schema,
     identity::AuthenticatedCaller,
     snapshot::ConfigStore,
 };
@@ -237,7 +237,7 @@ impl ExecutionCoordinator {
             || desc.effects != EffectClass::Observe
             || desc.supported_target_kind != "Host"
             || cap.input_schema != input_schema()
-            || cap.output_schema != output_schema()
+            || cap.output_schema != crate::adapter::trusted_output_schema(desc.id).unwrap_or_default()
             || cap.max_output_bytes == 0
             || cap.max_output_bytes > desc.max_output_bytes
         {
@@ -252,6 +252,13 @@ impl ExecutionCoordinator {
             )?;
             return Err(RuntimeFailure::Unauthorized);
         };
+
+        if (desc.id == "builtin.linux.uname/v1" && host.spec.ssh.is_none())
+            || (desc.id == "builtin.https.health/v1" && host.spec.https.is_none())
+        {
+            deny(desc.id, &target, RuntimeFailure::Unavailable)?;
+            return Err(RuntimeFailure::Unavailable);
+        }
 
         let permit = match self.capacity.try_acquire() {
             Ok(permit) => permit,
@@ -280,7 +287,8 @@ impl ExecutionCoordinator {
 
         // A single absolute deadline covers any broker request and the adapter.
         // A slow/failed provider cannot extend execution beyond the descriptor.
-        let deadline = Instant::now() + desc.max_timeout;
+        let configured = std::time::Duration::from_millis(cap.timeout_ms);
+        let deadline = Instant::now() + desc.max_timeout.min(configured);
         let lease = match desc.credential {
             CredentialRequirement::None => None,
             CredentialRequirement::Scoped { purpose } => {
@@ -297,6 +305,8 @@ impl ExecutionCoordinator {
             target: ResolvedTarget {
                 id: host.metadata.name.clone(),
                 address: host.spec.address.clone(),
+                ssh: host.spec.ssh.clone(),
+                https: host.spec.https.clone(),
             },
             input,
             lease,
@@ -308,11 +318,31 @@ impl ExecutionCoordinator {
             Err(_) => return self.fail(&event, RuntimeFailure::TimedOut),
         };
 
-        // Only the vetted inventory result shape is supported in M2.
-        // It must match the resolved inventory, not just an arbitrary JSON shape.
-        if output != json!({"id": host.metadata.name, "hostname": host.spec.address})
-            || serde_json::to_vec(&output)
-                .map_or(true, |encoded| encoded.len() > cap.max_output_bytes)
+        // Final validation never trusts a remote body or an adapter's assertion
+        // of its own identity. Every output kind is closed and non-sensitive.
+        let expected = match desc.id {
+            "builtin.inventory.inspect/v1" => json!({
+                "id": host.metadata.name, "hostname": host.spec.address
+            }),
+            "builtin.linux.uname/v1" => json!({
+                "id": host.metadata.name, "os": "Linux"
+            }),
+            "builtin.https.health/v1" => {
+                let Some(status) = output.get("statusCode").and_then(Value::as_u64) else {
+                    return self.fail(&event, RuntimeFailure::InvalidOutput);
+                };
+                if !(100..=599).contains(&status) {
+                    return self.fail(&event, RuntimeFailure::InvalidOutput);
+                }
+                json!({
+                    "id": host.metadata.name, "statusCode": status,
+                    "healthy": (200..300).contains(&status)
+                })
+            }
+            _ => return self.fail(&event, RuntimeFailure::Unavailable),
+        };
+        if output != expected || serde_json::to_vec(&output)
+            .map_or(true, |encoded| encoded.len() > cap.max_output_bytes)
         {
             return self.fail(&event, RuntimeFailure::InvalidOutput);
         }
