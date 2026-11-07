@@ -9,7 +9,7 @@ use std::{
 };
 
 use serde_json::{Value, json};
-use tokio::{sync::Semaphore, time::timeout};
+use tokio::{sync::Semaphore, time::{Instant, timeout_at}};
 
 use crate::{
     adapter::{
@@ -275,15 +275,17 @@ impl ExecutionCoordinator {
             .record(&event(AuditPhase::Authorized, "authorized"))
             .map_err(|_| RuntimeFailure::AuditUnavailable)?;
 
+        // A single absolute deadline covers any broker request and the adapter.
+        // A slow/failed provider cannot extend execution beyond the descriptor.
+        let deadline = Instant::now() + desc.max_timeout;
         let lease = match desc.credential {
             CredentialRequirement::None => None,
             CredentialRequirement::Scoped { purpose } => {
                 let expected = CredentialScope::new(desc.id, &target, purpose);
-                match self.broker.acquire(&expected) {
-                    Ok(received) if received.scope() == &expected => Some(received),
-                    _ => {
-                        return self.fail(&event, RuntimeFailure::BrokerUnavailable);
-                    }
+                match timeout_at(deadline, self.broker.acquire(expected.clone())).await {
+                    Ok(Ok(received)) if received.scope() == &expected => Some(received),
+                    Err(_) => return self.fail(&event, RuntimeFailure::TimedOut),
+                    _ => return self.fail(&event, RuntimeFailure::BrokerUnavailable),
                 }
             }
         };
@@ -297,7 +299,7 @@ impl ExecutionCoordinator {
             lease,
         };
 
-        let output = match timeout(desc.max_timeout, adapter.execute(req)).await {
+        let output = match timeout_at(deadline, adapter.execute(req)).await {
             Ok(Ok(value)) => value,
             Ok(Err(_)) => return self.fail(&event, RuntimeFailure::AdapterFailed),
             Err(_) => return self.fail(&event, RuntimeFailure::TimedOut),
@@ -417,16 +419,25 @@ mod tests {
     }
 
     impl CredentialBroker for BrokerSpy {
-        fn acquire(&self, scope: &CredentialScope) -> Result<CredentialLease, BrokerFailure> {
+        fn acquire(
+            &self,
+            scope: CredentialScope,
+        ) -> Pin<Box<dyn Future<Output = Result<CredentialLease, BrokerFailure>> + Send + '_>> {
             self.count.fetch_add(1, Ordering::SeqCst);
-            match self.mode {
-                "correct" => Ok(CredentialLease::for_test(scope.clone(), "SECRET-CANARY")),
-                "wrong" => Ok(CredentialLease::for_test(
-                    CredentialScope::new(scope.operation(), "wrong-target", scope.purpose()),
-                    "SECRET-CANARY",
-                )),
-                _ => Err(BrokerFailure::Unavailable),
-            }
+            Box::pin(async move {
+                match self.mode {
+                    "correct" => Ok(CredentialLease::for_test(scope, "SECRET-CANARY")),
+                    "wrong" => Ok(CredentialLease::for_test(
+                        CredentialScope::new(scope.operation(), "wrong-target", scope.purpose()),
+                        "SECRET-CANARY",
+                    )),
+                    "delay" => {
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        Ok(CredentialLease::for_test(scope, "SECRET-CANARY"))
+                    }
+                    _ => Err(BrokerFailure::Unavailable),
+                }
+            })
         }
     }
 
@@ -622,6 +633,20 @@ mod tests {
             }
             assert!(!format!("{:?}", audit.events.lock().unwrap()).contains("SECRET-CANARY"));
         }
+    }
+
+    #[tokio::test]
+    async fn broker_deadline_prevents_late_adapter_execution() {
+        let adapter = Arc::new(TestAdapter::new("ok", &SCOPED_DESCRIPTOR));
+        let broker = Arc::new(BrokerSpy::new("delay"));
+        let audit = Arc::new(MemoryAudit::new(None));
+        let runtime = coordinator(adapter.clone(), broker.clone(), audit.clone());
+        let result = runtime.invoke(&caller("example-operator"), "inventory.inspect",
+            json!({"target":"sample-linux"})).await;
+        assert_eq!(result.unwrap_err(), RuntimeFailure::TimedOut);
+        assert_eq!(broker.count.load(Ordering::SeqCst), 1);
+        assert_eq!(adapter.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(audit.phases(), vec![AuditPhase::Authorized, AuditPhase::Failed]);
     }
 
     #[tokio::test]

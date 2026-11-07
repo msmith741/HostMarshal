@@ -1,6 +1,6 @@
 //! Provider-neutral credential request and *opaque* lease contracts (FR-008).
 //! M2 supports only a denying production broker; no real secrets are handled.
-use std::fmt;
+use std::{fmt, future::Future, pin::Pin};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CredentialScope {
@@ -76,14 +76,21 @@ pub enum BrokerFailure {
 pub trait CredentialBroker: Send + Sync {
     /// May be called only *after* authorization and pre-execution audit commitment.
     /// The broker must enforce the operation+target+purpose scope independently.
-    fn acquire(&self, scope: &CredentialScope) -> Result<CredentialLease, BrokerFailure>;
+    /// Futures are bounded by the coordinator's operation-wide deadline.
+    fn acquire(
+        &self,
+        scope: CredentialScope,
+    ) -> Pin<Box<dyn Future<Output = Result<CredentialLease, BrokerFailure>> + Send + '_>>;
 }
 
 /// Conservative production default: there are no secrets or credential backends.
 pub struct DenyCredentialBroker;
 
 impl CredentialBroker for DenyCredentialBroker {
-    fn acquire(&self, _scope: &CredentialScope) -> Result<CredentialLease, BrokerFailure> {
-        Err(BrokerFailure::Denied)
+    fn acquire(
+        &self,
+        _scope: CredentialScope,
+    ) -> Pin<Box<dyn Future<Output = Result<CredentialLease, BrokerFailure>> + Send + '_>> {
+        Box::pin(async { Err(BrokerFailure::Denied) })
     }
 }
