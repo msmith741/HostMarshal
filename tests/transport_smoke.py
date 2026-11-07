@@ -5,6 +5,7 @@ Does not access the user's network, SSH keys or real services.
 """
 import http.server
 import json
+import pwd
 import os
 import shutil
 import signal
@@ -19,7 +20,7 @@ from pathlib import Path
 
 from mcp_smoke import BIN, response, send
 
-USER = "hmobserver"
+USER = pwd.getpwuid(os.getuid()).pw_name
 
 
 def command(*args, input_text=None):
@@ -98,18 +99,12 @@ def start_ssh(root):
             "-f", str(root / "host_key"))
     command("ssh-keygen", "-q", "-t", "ed25519", "-N", "",
             "-f", str(root / "other_host_key"))
-    if subprocess.run(["id", "-u", USER], capture_output=True).returncode != 0:
-        command("sudo", "useradd", "-m", "-s", "/bin/sh", USER)
-    # Random ephemeral test-only password, password authentication disabled.
-    command("sudo", "chpasswd", input_text=f"{USER}:{os.urandom(24).hex()}\n")
+    # Reuse the disposable CI runner's own local account; do not modify or
+    # create system users. The key file is private to this temporary directory.
     command("sudo", "install", "-d", "-m", "0755", "/run/sshd")
-    # SSHD must read authorized_keys as the unprivileged login account.
-    # The test temp directory is 0700 to the CI runner and inaccessible there.
-    authorized = Path(f"/home/{USER}/.ssh/authorized_keys")
-    command("sudo", "install", "-d", "-m", "0700",
-            "-o", USER, "-g", USER, str(authorized.parent))
-    command("sudo", "install", "-m", "0600",
-            "-o", USER, "-g", USER, str(root / "client_key.pub"), str(authorized))
+    authorized = root / "authorized_keys"
+    authorized.write_text((root / "client_key.pub").read_text())
+    authorized.chmod(0o600)
     known = root / "known_hosts"
     alias = "sample-linux"
     host_key_pub = (root / "host_key.pub").read_text().split()
@@ -122,7 +117,7 @@ def start_ssh(root):
         f"HostKey {root / 'host_key'}\n"
         f"AuthorizedKeysFile {authorized}\n"
         "PubkeyAuthentication yes\nPasswordAuthentication no\n"
-        "KbdInteractiveAuthentication no\nStrictModes no\nUsePAM no\n"
+        "KbdInteractiveAuthentication no\nStrictModes no\nUsePAM yes\n"
         "PermitRootLogin no\n"
         f"AllowUsers {USER}\n"
         f"PidFile {root / 'sshd.pid'}\nLogLevel ERROR\n"

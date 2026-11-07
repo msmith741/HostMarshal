@@ -94,10 +94,8 @@ def start_cert_only_ssh(root):
     config = root / "sshd_config"
     config.write_text(config.read_text() + f"\nTrustedUserCAKeys {root / 'vault-ca.pub'}\n")
     # The user must NOT be able to log in with the raw M3 public key.
-    subprocess.run(
-        ["sudo", "sh", "-c", f": > /home/{USER}/.ssh/authorized_keys"],
-        check=True, timeout=10,
-    )
+    # The account's test-only authorized-keys file is confined to this temp dir.
+    (root / "authorized_keys").write_text("")
     sshd = subprocess.Popen(
         ["sudo", "/usr/sbin/sshd", "-D", "-e", "-f", str(config)],
         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
