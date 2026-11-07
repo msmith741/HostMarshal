@@ -57,7 +57,7 @@ The coordinator exposes stable `RuntimeFailure` variants: `Unauthorized`, `Inval
 
 ## M2 verification
 
-Rust tests cover authorized success, denied caller/target/tool/arguments, broker-not-called on denial, broker outages, mismatched scope and a slow broker, audit-start failure before execution, adapter failure, output tampering, timeouts, and terminal-audit failure. `tests/audit_smoke.py` drives the real MCP process using a protected JSONL file and checks request correlation, authorization, denial, secret redaction and file mode. All earlier schema, reload and dual-MCP-era suites remain required CI checks.
+Rust tests cover authorized success, denied caller/target/tool/arguments, emergency lockdown, exhausted admission capacity, broker-not-called on denial, broker outages, mismatched scope and a slow broker, audit-start failure before execution, adapter failure, output tampering, timeouts, and terminal-audit failure. `tests/audit_smoke.py` drives the real MCP process using a protected JSONL file and checks request correlation, authorization, denial, secret redaction and file mode. All earlier schema, reload and dual-MCP-era suites remain required CI checks.
 
 ## Deliberate limitations
 
