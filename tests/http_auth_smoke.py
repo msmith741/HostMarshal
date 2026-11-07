@@ -164,7 +164,8 @@ def main():
                 "params": {"_meta": META},
             })
             assert denied == 401
-            assert "/.well-known/oauth-protected-resource" in challenge["WWW-Authenticate"]
+            challenge_headers = {key.lower(): value for key, value in challenge.items()}
+            assert "/.well-known/oauth-protected-resource" in challenge_headers.get("www-authenticate", ""), challenge_headers
 
             assert rpc(port, alice, 1, "server/discover")[0] == 200
             ok, _, listing = rpc(port, alice, 2, "tools/list")
