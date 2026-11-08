@@ -68,18 +68,21 @@ struct JwkFile {
     keys: Vec<RsaPublicKey>,
 }
 
+/// OIDC issuers may expose ECDSA/EdDSA keys and x5c/x5t metadata.
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct RsaPublicKey {
     kid: String,
     kty: String,
-    alg: String,
-    #[serde(rename = "use")]
-    key_use: String,
+    #[serde(default)]
+    alg: Option<String>,
+    #[serde(rename = "use", default)]
+    key_use: Option<String>,
     #[serde(default)]
     key_ops: Option<Vec<String>>,
-    n: String,
-    e: String,
+    #[serde(default)]
+    n: Option<String>,
+    #[serde(default)]
+    e: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -442,30 +445,35 @@ fn parse_jwks(bytes: &[u8]) -> Result<BTreeMap<String, DecodingKey>> {
         "invalid JWKS key count"
     );
     let mut keys = BTreeMap::new();
+    let mut ids = std::collections::BTreeSet::new();
     for jwk in jwks.keys {
         ensure!(
-            jwk.kty == "RSA" && jwk.alg == "RS256" && jwk.key_use == "sig",
-            "only RSA RS256 signing keys accepted"
-        );
-        ensure!(
-            jwk.key_ops
-                .as_ref()
-                .is_none_or(|ops| ops.len() == 1 && ops[0] == "verify"),
-            "JWKS key operations must be verify-only"
-        );
-        ensure!(
-            !jwk.kid.is_empty()
-                && jwk.kid.len() <= 128
-                && jwk
-                    .kid
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.')),
+            !jwk.kid.is_empty() && jwk.kid.len() <= 128
+                && jwk.kid.bytes().all(|b| b.is_ascii_alphanumeric()
+                    || matches!(b, b'-' | b'_' | b'.')),
             "invalid JWT key ID"
         );
-        let key =
-            DecodingKey::from_rsa_components(&jwk.n, &jwk.e).context("invalid pinned RSA key")?;
-        ensure!(keys.insert(jwk.kid, key).is_none(), "duplicate JWT key ID");
+        ensure!(ids.insert(jwk.kid.clone()), "duplicate JWKS key ID");
+        if jwk.alg.as_deref() != Some("RS256") {
+            // Never enable another algorithm based on JWT header hints.
+            continue;
+        }
+        ensure!(
+            jwk.kty == "RSA" && jwk.key_use.as_deref() == Some("sig"),
+            "RS256 keys must be RSA signing keys"
+        );
+        ensure!(
+            jwk.key_ops.as_ref().is_none_or(|ops|
+                ops.len() == 1 && ops[0] == "verify"),
+            "RS256 key operations must be verify-only"
+        );
+        let n = jwk.n.context("RS256 key missing RSA modulus")?;
+        let e = jwk.e.context("RS256 key missing RSA exponent")?;
+        let key = DecodingKey::from_rsa_components(&n, &e)
+            .context("invalid pinned RSA signing key")?;
+        ensure!(keys.insert(jwk.kid, key).is_none(), "duplicate RS256 key");
     }
+    ensure!(!keys.is_empty(), "issuer JWKS contains no trusted RS256 signing keys");
     Ok(keys)
 }
 
@@ -525,4 +533,21 @@ mod tests {
             assert!(verifier.authenticate_header(header).await.is_err());
         }
     }
+    #[test]
+    fn mixed_issuer_jwks_does_not_admit_unsupported_keys() {
+        let jwks = serde_json::json!({"keys": [
+            {"kid":"ec-1","kty":"EC","alg":"ES256","use":"sig","crv":"P-256",
+             "x":"a","y":"b"},
+            {"kid":"rsa-1","kty":"RSA","alg":"RS256","use":"enc",
+             "n":"c2ln", "e":"AQAB", "x5c":["public-cert"]},
+        ]});
+        assert!(parse_jwks(&serde_json::to_vec(&jwks).unwrap()).is_err());
+        let repeated = serde_json::json!({"keys": [
+            {"kid":"same","kty":"EC","alg":"ES256","use":"sig"},
+            {"kid":"same","kty":"RSA","alg":"RS256","use":"sig",
+             "n":"c2ln","e":"AQAB"},
+        ]});
+        assert!(parse_jwks(&serde_json::to_vec(&repeated).unwrap()).is_err());
+    }
+
 }
