@@ -203,8 +203,38 @@ def install(root, tls_cert, tls_key, auth, proof, jwks, *, network=False):
     kube("create", "secret", "tls", "hostmarshal-ci-tls", "-n", NS,
          "--cert=" + str(tls_cert), "--key=" + str(tls_key))
     kube("apply", "-f", "deploy/k3s/ci/resources.yaml")
-    kube("rollout", "status", "deploy/hostmarshal", "-n", NS,
-         "--timeout=240s", timeout=250)
+    result = kube("rollout", "status", "deploy/hostmarshal", "-n", NS,
+                  "--timeout=75s", timeout=85, check=False)
+    if result.returncode != 0:
+        # Inspect only the disposable namespace. Never dump Secrets/Pod specs,
+        # file content or configured ingress proof into CI logs.
+        pod_list = read_json("get", "pods", "-n", NS,
+                             "-l", "app.kubernetes.io/name=hostmarshal")
+        statuses = []
+        for pod in pod_list.get("items", []):
+            for c in pod.get("status", {}).get("containerStatuses", []):
+                state = c.get("state", {})
+                previous = c.get("lastState", {}).get("terminated", {})
+                statuses.append({
+                    "container": c["name"],
+                    "ready": c.get("ready"),
+                    "reason": (state.get("waiting") or state.get("terminated") or {}).get("reason"),
+                    "exitCode": previous.get("exitCode"),
+                })
+        # Startup logs are ephemeral and redacted against the generated proof.
+        # Only collect bounded output from the two test containers on failure.
+        sections = []
+        for name in ("hostmarshal", "ingress-sidecar"):
+            output = kube("logs", "deployment/hostmarshal", "-n", NS,
+                          "-c", name, "--tail=18", check=False)
+            lines = (output.stdout + output.stderr).replace(
+                proof.read_text().strip(), "<redacted-ci-proof>"
+            )
+            sections.append(name + ": " + lines[-1500:])
+        raise AssertionError(
+            "HostMarshal rollout failed; container statuses: "
+            + json.dumps(statuses) + "; " + "; ".join(sections)
+        )
 
 
 def attacker_pod(name, namespace, label):
