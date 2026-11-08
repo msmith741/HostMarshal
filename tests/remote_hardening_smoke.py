@@ -18,18 +18,15 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from mcp_smoke import BIN
 from remote_http_smoke import ISSUER, AUDIENCE, claims, port_available, rpc
+from transport_smoke import tls_material
 
 
 def tls_cert(root, name):
-    key = root / f"{name}.key"
-    cert = root / f"{name}.pem"
-    subprocess.run([
-        "openssl", "req", "-x509", "-newkey", "rsa:2048",
-        "-sha256", "-noenc", "-days", "1", "-nodes",
-        "-keyout", str(key), "-out", str(cert),
-        "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost",
-    ], capture_output=True, check=True, timeout=15)
-    return cert, key
+    folder = root / name
+    folder.mkdir()
+    # A pinned trust anchor must be a CA, NOT an end-entity certificate.
+    # Reuse the existing independently tested CA + localhost server leaf.
+    return tls_material(folder)
 
 
 def start_tls_server(port, handler, cert, key):
@@ -102,8 +99,8 @@ def request_tls(port, cert, method, path, token=None, extra=None):
 def main():
     with tempfile.TemporaryDirectory(prefix="hostmarshal-online-jwks-") as tmp:
         root = Path(tmp)
-        jwks_cert, jwks_key = tls_cert(root, "jwks")
-        ingress_cert, ingress_key = tls_cert(root, "ingress")
+        jwks_ca, jwks_cert, jwks_key = tls_cert(root, "jwks")
+        ingress_ca, ingress_cert, ingress_key = tls_cert(root, "ingress")
         key_a, jwk_a = jwt_key()
         key_b, jwk_b = jwt_key()
         signer = {"jwks": {"keys": [jwk_a]}, "status": 200, "redirect": False}
@@ -146,7 +143,7 @@ def main():
             "issuer": ISSUER, "audience": AUDIENCE,
             "allowedHost": f"127.0.0.1:{port}",
             "jwksUrl": f"https://localhost:{jwks_port}/keys",
-            "jwksCaCertificateFile": str(jwks_cert),
+            "jwksCaCertificateFile": str(jwks_ca),
             "jwksRefreshSeconds": 30,
             "ingress": {
                 "mode": "trustedProxy",
@@ -220,7 +217,7 @@ def main():
             assert forged_status == 403, forged_status
 
             status, hdr, payload = request_tls(
-                ingress_port, ingress_cert, "GET",
+                ingress_port, ingress_ca, "GET",
                 "/.well-known/oauth-protected-resource/mcp",
             )
             assert status == 200, (status, payload)
@@ -233,17 +230,17 @@ def main():
             }, meta
             assert hdr["cache-control"] == "no-store", hdr
             status, hdr, _ = request_tls(
-                ingress_port, ingress_cert, "POST", "/mcp",
+                ingress_port, ingress_ca, "POST", "/mcp",
             )
             assert status == 401 and "resource_metadata=" in hdr["www-authenticate"], (status, hdr)
             assert "https://mcp.example.invalid/.well-known/oauth-protected-resource/mcp" in hdr["www-authenticate"]
 
-            status, _, payload = request_tls(ingress_port, ingress_cert, "POST", "/mcp", valid_a)
+            status, _, payload = request_tls(ingress_port, ingress_ca, "POST", "/mcp", valid_a)
             assert status == 200 and "inventory.inspect" in payload.decode(), (status, payload)
             # Tests TLS validation; an untrusted public root must not silently
             # validate this disposable ingress certificate.
             try:
-                request_tls(ingress_port, jwks_cert, "POST", "/mcp", valid_a)
+                request_tls(ingress_port, jwks_ca, "POST", "/mcp", valid_a)
             except ssl.SSLCertVerificationError:
                 pass
             else:
@@ -253,22 +250,22 @@ def main():
             # trusted refresh REPLACES, rather than merges, the old trust set.
             signer["jwks"] = {"keys": [jwk_b]}
             # The old key remains accepted for the bounded refresh interval.
-            assert request_tls(ingress_port, ingress_cert, "POST", "/mcp", valid_a)[0] == 200
+            assert request_tls(ingress_port, ingress_ca, "POST", "/mcp", valid_a)[0] == 200
             time.sleep(31)
-            status, _, _ = request_tls(ingress_port, ingress_cert, "POST", "/mcp", valid_a)
+            status, _, _ = request_tls(ingress_port, ingress_ca, "POST", "/mcp", valid_a)
             assert status == 401, status
             valid_b = issue(key_b)
-            status, _, payload = request_tls(ingress_port, ingress_cert, "POST", "/mcp", valid_b)
+            status, _, payload = request_tls(ingress_port, ingress_ca, "POST", "/mcp", valid_b)
             assert status == 200 and "inventory.inspect" in payload.decode(), (status, payload)
 
             # After cached keys expire, invalid online payloads and redirects
             # must never re-enable stale trust or follow a surprise endpoint.
             signer["redirect"] = True
             time.sleep(31)
-            assert request_tls(ingress_port, ingress_cert, "POST", "/mcp", valid_b)[0] == 401
+            assert request_tls(ingress_port, ingress_ca, "POST", "/mcp", valid_b)[0] == 401
             signer["redirect"] = False
             signer["jwks"] = {"keys": [jwk_b]}
-            assert request_tls(ingress_port, ingress_cert, "POST", "/mcp", valid_b)[0] == 200
+            assert request_tls(ingress_port, ingress_ca, "POST", "/mcp", valid_b)[0] == 200
             signer["status"] = 503
             # No immediate stale use after the next refresh deadline.
             # Avoid a third 30-second sleep: replace the running issuer
