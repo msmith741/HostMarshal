@@ -721,6 +721,46 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn sleeping_worker_preserves_existing_quarantine_epoch() {
+        // The worker may wake after a signing failure already quarantined
+        // the provider. Its wakeup must not overwrite the original epoch.
+        let now = Instant::now();
+        let lifecycle = Arc::new(LeaseLifecycle {
+            state: Arc::new(Mutex::new(State::Active(Active {
+                token: Zeroizing::new("opaque".to_owned()),
+                expires: now + Duration::from_secs(2),
+                maintain_at: now + Duration::from_millis(100),
+            }))),
+            policy: "sign-only".to_owned(),
+            renew_url: Url::parse("https://example.invalid/v1/auth/token/renew-self").unwrap(),
+            renew_before: Duration::from_secs(15),
+            recovery_epoch_file: None,
+            worker: StdMutex::new(None),
+        });
+        lifecycle.start_worker(Client::new()).unwrap();
+        // Give the task time to read Active before the quarantine transition.
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        *lifecycle.state.lock().await = State::Quarantined(Some(100));
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if lifecycle.worker.lock().unwrap().as_ref().unwrap().is_finished() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(matches!(
+            *lifecycle.state.lock().await,
+            State::Quarantined(Some(100))
+        ));
+        let mut state = State::Quarantined(Some(101));
+        lifecycle.refresh_quarantine(&mut state);
+        assert!(matches!(state, State::Quarantined(Some(101))));
+    }
+
     #[test]
     fn proactive_schedule_has_minimum_ttl_fraction() {
         let lease = Lease {
