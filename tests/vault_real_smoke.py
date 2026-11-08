@@ -358,7 +358,12 @@ def main():
             advance_recovery_epoch(100)
             observe_app(False)  # restoring the baseline still does not recover
             advance_recovery_epoch(101)   # explicit operator-authorized retry
-            observe_app(True)             # fresh bounded Vault AppRole login
+            secret_file.write_text("invalid-secret-id")
+            observe_app(False)            # fresh Vault login fails and is audited
+            secret_file.write_text(secret_id)
+            observe_app(False)            # consumed epoch cannot be replayed
+            advance_recovery_epoch(102)
+            observe_app(True)             # new increment allows bounded login
             app_text = app_audit.read_text()
             for value in (role_id, secret_id, root_token, restricted, replacement):
                 assert value not in app_text, "Vault credential leaked to audit"
@@ -412,7 +417,7 @@ def main():
             api("PUT", "sys/policies/acl/hostmarshal-sign-only",
                 {"policy": renewable_policy}, root_token)
             observe_proactive(False)
-            advance_recovery_epoch(102)
+            advance_recovery_epoch(103)
             observe_proactive(True)
             app_events = [json.loads(line) for line in app_audit.read_text().splitlines()]
             renewals = [event for event in app_events
@@ -423,6 +428,7 @@ def main():
             assert any(event["phase"] == "succeeded" for event in renewals)
             assert any(event["phase"] == "failed" for event in renewals)
             assert any(event["phase"] == "succeeded" for event in recoveries)
+            assert any(event["phase"] == "failed" for event in recoveries)
             for event in renewals + recoveries:
                 assert event["issuer"] == "<system>" and event["subject"] == "<system>"
                 assert event["target"] == "<provider>"
@@ -548,7 +554,7 @@ def main():
             api("PUT", "sys/policies/acl/hostmarshal-sign-only",
                 {"policy": renewable_policy}, root_token)
             observe_jwt(False)  # cannot silently re-login with JWT
-            advance_recovery_epoch(103)
+            advance_recovery_epoch(104)
             observe_jwt(True)        # fresh JWT signature/role policy validated
             jwt_events = [json.loads(line) for line in jwt_audit.read_text().splitlines()]
             assert any(event.get("operation") == "vault.signing-lease.renew/v1"
