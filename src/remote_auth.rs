@@ -143,8 +143,10 @@ impl RemoteJwtVerifier {
         );
         let as_metadata_url = match config.authorization_server_metadata_url {
             Some(address) => {
-                ensure!(config.jwks_url.is_some(),
-                    "authorization-server metadata requires online JWKS");
+                ensure!(
+                    config.jwks_url.is_some(),
+                    "authorization-server metadata requires online JWKS"
+                );
                 let endpoint = Url::parse(&address).context("invalid auth-server metadata URL")?;
                 let configured_issuer = Url::parse(&config.issuer)?;
                 let configured_keys = Url::parse(config.jwks_url.as_deref().unwrap_or_default())?;
@@ -156,7 +158,9 @@ impl RemoteJwtVerifier {
                         && endpoint.password().is_none()
                         && endpoint.query().is_none()
                         && endpoint.fragment().is_none()
-                        && endpoint.path().ends_with("/.well-known/openid-configuration"),
+                        && endpoint
+                            .path()
+                            .ends_with("/.well-known/openid-configuration"),
                     "auth-server metadata must be pinned to the HTTPS issuer/JWKS origin"
                 );
                 Some(endpoint)
@@ -283,16 +287,25 @@ impl RemoteJwtVerifier {
     /// used to retrieve JWKS. Discovery cannot change signing keys or audience.
     /// A mismatch denies server startup, rather than accepting token hints.
     pub async fn validate_authorization_server(&self) -> Result<()> {
-        let Some(endpoint) = &self.as_metadata_url else { return Ok(()); };
-        let online = self.online.as_ref().context("OIDC metadata requires online keys")?;
+        let Some(endpoint) = &self.as_metadata_url else {
+            return Ok(());
+        };
+        let online = self
+            .online
+            .as_ref()
+            .context("OIDC metadata requires online keys")?;
         let response = online.client.get(endpoint.clone()).send().await?;
-        ensure!(response.status().is_success() && response.url() == endpoint,
-            "OIDC discovery failed or redirected");
+        ensure!(
+            response.status().is_success() && response.url() == endpoint,
+            "OIDC discovery failed or redirected"
+        );
         let mut response = response;
         let mut raw = Vec::new();
         while let Some(chunk) = response.chunk().await? {
-            ensure!(raw.len().saturating_add(chunk.len()) <= 32 * 1024,
-                "OIDC metadata exceeds size limit");
+            ensure!(
+                raw.len().saturating_add(chunk.len()) <= 32 * 1024,
+                "OIDC metadata exceeds size limit"
+            );
             raw.extend_from_slice(&chunk);
         }
         #[derive(Deserialize)]
@@ -304,23 +317,37 @@ impl RemoteJwtVerifier {
             #[serde(default)]
             grant_types_supported: Vec<String>,
         }
-        let discovered: Discovery = serde_json::from_slice(&raw)
-            .context("invalid OIDC discovery document")?;
-        ensure!(discovered.issuer == self.issuer,
-            "OIDC discovery issuer mismatch");
-        ensure!(discovered.jwks_uri == online.url.as_str(),
-            "OIDC discovery JWKS is not the administrator-pinned URL");
-        for endpoint in [&discovered.token_endpoint, &discovered.authorization_endpoint] {
+        let discovered: Discovery =
+            serde_json::from_slice(&raw).context("invalid OIDC discovery document")?;
+        ensure!(
+            discovered.issuer == self.issuer,
+            "OIDC discovery issuer mismatch"
+        );
+        ensure!(
+            discovered.jwks_uri == online.url.as_str(),
+            "OIDC discovery JWKS is not the administrator-pinned URL"
+        );
+        for endpoint in [
+            &discovered.token_endpoint,
+            &discovered.authorization_endpoint,
+        ] {
             let parsed = Url::parse(endpoint)?;
-            ensure!(parsed.scheme() == "https"
-                && parsed.origin() == online.url.origin()
-                && parsed.username().is_empty()
-                && parsed.password().is_none()
-                && parsed.fragment().is_none(),
-                "untrusted OIDC endpoint origin");
+            ensure!(
+                parsed.scheme() == "https"
+                    && parsed.origin() == online.url.origin()
+                    && parsed.username().is_empty()
+                    && parsed.password().is_none()
+                    && parsed.fragment().is_none(),
+                "untrusted OIDC endpoint origin"
+            );
         }
-        ensure!(discovered.grant_types_supported.iter().any(|g| g == "client_credentials"),
-            "OIDC issuer does not advertise the required client_credentials grant");
+        ensure!(
+            discovered
+                .grant_types_supported
+                .iter()
+                .any(|g| g == "client_credentials"),
+            "OIDC issuer does not advertise the required client_credentials grant"
+        );
         Ok(())
     }
 
@@ -448,9 +475,12 @@ fn parse_jwks(bytes: &[u8]) -> Result<BTreeMap<String, DecodingKey>> {
     let mut ids = std::collections::BTreeSet::new();
     for jwk in jwks.keys {
         ensure!(
-            !jwk.kid.is_empty() && jwk.kid.len() <= 128
-                && jwk.kid.bytes().all(|b| b.is_ascii_alphanumeric()
-                    || matches!(b, b'-' | b'_' | b'.')),
+            !jwk.kid.is_empty()
+                && jwk.kid.len() <= 128
+                && jwk
+                    .kid
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.')),
             "invalid JWT key ID"
         );
         ensure!(ids.insert(jwk.kid.clone()), "duplicate JWKS key ID");
@@ -463,17 +493,21 @@ fn parse_jwks(bytes: &[u8]) -> Result<BTreeMap<String, DecodingKey>> {
             "RS256 keys must be RSA signing keys"
         );
         ensure!(
-            jwk.key_ops.as_ref().is_none_or(|ops|
-                ops.len() == 1 && ops[0] == "verify"),
+            jwk.key_ops
+                .as_ref()
+                .is_none_or(|ops| ops.len() == 1 && ops[0] == "verify"),
             "RS256 key operations must be verify-only"
         );
         let n = jwk.n.context("RS256 key missing RSA modulus")?;
         let e = jwk.e.context("RS256 key missing RSA exponent")?;
-        let key = DecodingKey::from_rsa_components(&n, &e)
-            .context("invalid pinned RSA signing key")?;
+        let key =
+            DecodingKey::from_rsa_components(&n, &e).context("invalid pinned RSA signing key")?;
         ensure!(keys.insert(jwk.kid, key).is_none(), "duplicate RS256 key");
     }
-    ensure!(!keys.is_empty(), "issuer JWKS contains no trusted RS256 signing keys");
+    ensure!(
+        !keys.is_empty(),
+        "issuer JWKS contains no trusted RS256 signing keys"
+    );
     Ok(keys)
 }
 
@@ -549,5 +583,4 @@ mod tests {
         ]});
         assert!(parse_jwks(&serde_json::to_vec(&repeated).unwrap()).is_err());
     }
-
 }
