@@ -5,6 +5,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '17 5 * * 0' # full weekly regression, including real Vault and OAuth
 
 permissions:
   contents: read
@@ -14,7 +16,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  select:
+    name: Conservative regression impact selection
+    runs-on: ubuntu-latest
+    outputs:
+      core: ${{ steps.paths.outputs.core }}
+      vault: ${{ steps.paths.outputs.vault }}
+      oauth: ${{ steps.paths.outputs.oauth }}
+      fuzz: ${{ steps.paths.outputs.fuzz }}
+      k3s: ${{ steps.paths.outputs.k3s }}
+      isolation: ${{ steps.paths.outputs.isolation }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify selector denies unknown/unsafe changes
+        run: python3 tests/test_ci_select.py
+      - name: Compute fail-safe relevant suites
+        id: paths
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.sha }}
+          EVENT: ${{ github.event_name }}
+        run: python3 tests/ci_select.py --event "$EVENT" --base "$BASE" --head "$HEAD" --output "$GITHUB_OUTPUT"
+
   verify:
+    needs: select
+    if: needs.select.outputs.core == 'true'
     name: Format, lint, tests and schema conformance
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -71,6 +100,8 @@ jobs:
           .remote-auth-venv/bin/python tests/remote_hardening_smoke.py
 
   vault-real:
+    needs: select
+    if: needs.select.outputs.vault == 'true'
     name: Real Vault TLS SSH signer interoperability
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -105,6 +136,8 @@ jobs:
         run: python3 tests/vault_real_smoke.py
 
   fuzz-smoke:
+    needs: select
+    if: needs.select.outputs.fuzz == 'true'
     name: Coverage-guided fuzz target smoke
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -118,6 +151,8 @@ jobs:
         run: cargo +nightly-2026-11-06 fuzz run yaml_manifest -- -runs=512 -timeout=5 -max_len=8192
 
   ingress-oauth:
+    needs: select
+    if: needs.select.outputs.oauth == 'true'
     name: Traefik isolation and real Keycloak OAuth interoperability
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -131,3 +166,36 @@ jobs:
           .oauth-ci-venv/bin/pip install --disable-pip-version-check -q 'PyJWT==2.10.1' 'cryptography==46.0.3'
       - name: Test real OAuth issuer and TLS-only Traefik isolation
         run: .oauth-ci-venv/bin/python tests/ingress_oidc_ci.py
+
+  ci-gate:
+    name: Regression acceptance gate
+    if: always()
+    needs: [select, verify, vault-real, fuzz-smoke, ingress-oauth]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all required and selected suites completed successfully
+        env:
+          SELECT_RESULT: ${{ needs.select.result }}
+          CORE_NEEDED: ${{ needs.select.outputs.core }}
+          CORE_RESULT: ${{ needs.verify.result }}
+          VAULT_NEEDED: ${{ needs.select.outputs.vault }}
+          VAULT_RESULT: ${{ needs.vault-real.result }}
+          FUZZ_NEEDED: ${{ needs.select.outputs.fuzz }}
+          FUZZ_RESULT: ${{ needs.fuzz-smoke.result }}
+          OAUTH_NEEDED: ${{ needs.select.outputs.oauth }}
+          OAUTH_RESULT: ${{ needs.ingress-oauth.result }}
+        run: |
+          set -euo pipefail
+          test "$SELECT_RESULT" = success
+          check() {
+            if [ "$1" = true ]; then
+              test "$2" = success
+            else
+              test "$2" = skipped
+            fi
+          }
+          check "$CORE_NEEDED" "$CORE_RESULT"
+          check "$VAULT_NEEDED" "$VAULT_RESULT"
+          check "$FUZZ_NEEDED" "$FUZZ_RESULT"
+          check "$OAUTH_NEEDED" "$OAUTH_RESULT"
+          echo 'All selected regression lanes passed or were safely skipped'
