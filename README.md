@@ -96,3 +96,7 @@ python3 tests/remote_hardening_smoke.py  # disposable pinned-TLS JWKS, OAuth met
 ~~~
 
 Licensed under [Apache 2.0](LICENSE).
+
+### Production-shaped ingress and real OAuth CI
+
+M4 now has an additional **disposable** CI topology with real Keycloak machine-to-machine client-credentials access tokens, pinned OIDC discovery and a Traefik TLS-only proxy sharing its network namespace with a loopback-only HostMarshal backend. See [the ingress/OAuth test guide](docs/INGRESS_OAUTH_CI.md). It is not a deployed production service; do not merge M4 without the remaining release review and actual site isolation checks.

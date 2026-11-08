@@ -82,3 +82,5 @@ M0 → M1 → M2 → M3. M4 depends on M2 and transport security readiness. M5 d
 ## Release and change policy
 
 These are **milestones**, not promised semantic versions. No stable 1.0 API or production-support claim is established. All public interfaces get explicit versioning and deprecation rules before release. See [development workflow](DEVELOPMENT_WORKFLOW.md) and [ADRs](adr/README.md).
+
+**M4 FR-026/FR-027 extension:** Optional pinned OIDC authorization-server discovery is checked against the configured issuer/JWKS and OAuth endpoint origin at startup. A dedicated GitHub Actions job adds disposable real-Keycloak client-credentials token issuance and an isolated Traefik TLS-only ingress/backend topology, with negative network/TLS/header tests. These are CI acceptance checks for the reference design, not a production deployment or proof of the user's network configuration. Next release gates: actual ingress security review, interactive OAuth client PKCE interoperability, rotation/outage exercises, concurrency/rate limiting, and tamper-evident audit.

@@ -43,6 +43,8 @@ HostMarshal provides **typed, authorized, auditable infrastructure operations** 
 | FR-023 | Rotate remote JWT verification keys from an administrator-pinned HTTPS JWKS endpoint with pinned CA, strict key validation, bounded refresh, and no stale-on-error fallback | M4 |
 | FR-024 | Publish RFC 9728 OAuth protected-resource metadata and a resource_metadata-bearing 401 challenge without treating discovery as authentication | M4 |
 | FR-025 | Require authenticated local reverse-proxy attestation for ingress mode (HTTPS scheme, exact public Host, protected proof) and deny direct-backend bypass, with sanitized audit | M4 |
+| FR-026 | Verify administrator-pinned OAuth/OIDC authorization-server discovery over trusted HTTPS at startup, including exact issuer, JWKS URI, endpoint origin, and supported machine-client grant; reject mismatched metadata | M4 |
+| FR-027 | Test a production-shaped TLS reverse proxy and isolated MCP backend against a real OAuth issuer, covering token acquisition, issuer/audience/scope checks, TLS trust and network bypass via independent CI | M4 |
 
 ## Non-functional requirements
 
