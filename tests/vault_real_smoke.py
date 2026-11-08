@@ -325,6 +325,17 @@ def main():
             process.wait(timeout=6)
             process = None
 
+            # Preserve the independent real-Vault outage check using a live
+            # session, not the token-file MCP client closed before AppRole.
+            process = subprocess.Popen([
+                str(BIN), "--config-dir", str(config),
+                "--principal", "example-operator",
+                "--vault-ssh-config", str(signer_config),
+                "--audit-log", str(audit),
+            ], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, bufsize=1, env=environment)
+            client = MCP(process)
+
             subprocess.run(
                 ["docker", "stop", container],
                 check=True, capture_output=True, timeout=20,
