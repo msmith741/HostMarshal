@@ -75,7 +75,7 @@ At the **first authorized** observation HostMarshal reads the signed JWT, submit
 
 ## Verification and release gate
 
-The CI test `tests/vault_real_smoke.py` exercises an actual disposable TLS Vault JWT auth backend with ephemeral RSA signing keys and fixed issuer/audience/subject. It performs short-lived SSH certificate operations against an ephemeral local SSH server, wrong-claim denials, forced renew-self, revoked renewal and sticky quarantine, without any production secrets. Rust unit tests verify protected direct file and projected symlink boundaries. Real Vault tests are necessary but insufficient for production deployment or independent third-party identity federation. This feature remains experimental pending full lifecycle and security review. See [ADR-0015](adr/0015-issuer-neutral-jwt-workload-auth.md).
+The CI test `tests/vault_real_smoke.py` exercises an actual disposable TLS Vault JWT auth backend with ephemeral RSA signing keys and fixed issuer/audience/subject. It performs short-lived SSH certificate operations against an ephemeral local SSH server, wrong-claim denials, time-bounded renew-self, revoked renewal and sticky quarantine, without any production secrets. Rust unit tests verify protected direct file and projected symlink boundaries. Real Vault tests are necessary but insufficient for production deployment or independent third-party identity federation. This feature remains experimental pending full lifecycle and security review. See [ADR-0015](adr/0015-issuer-neutral-jwt-workload-auth.md).
 
 ## Proactive renewal and operator recovery
 
