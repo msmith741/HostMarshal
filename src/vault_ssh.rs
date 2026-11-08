@@ -92,7 +92,11 @@ fn safe_segment(value: &str) -> bool {
 }
 
 impl VaultSshCertificateBroker {
-    pub fn load(path: &Path, config: &CompiledConfig, audit: std::sync::Arc<dyn AuditSink>) -> Result<Self> {
+    pub fn load(
+        path: &Path,
+        config: &CompiledConfig,
+        audit: std::sync::Arc<dyn AuditSink>,
+    ) -> Result<Self> {
         check_private_key_file(path).context("Vault signer config must be protected")?;
         let content = fs::read(path)?;
         ensure!(
