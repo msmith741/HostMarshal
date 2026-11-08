@@ -1,6 +1,6 @@
 # Proactive Vault signer lease lifecycle and recovery
 
-**Status:** Experimental M4 FR-032/FR-033, draft PR #12; deployment-neutral and not a production security sign-off.
+**Status:** Experimental M4 FR-032/FR-033; real Vault lifecycle/negative-path and independent CI passed on the tested source revision. Draft PR #12 is not a production security sign-off.
 
 ## Architecture and behavior
 
