@@ -46,6 +46,20 @@ jobs:
             --image rancher/k3s:v1.34.5-k3s1 \
             --servers 1 --agents 2 --wait --timeout 300s
           kubectl wait nodes --all --for=condition=Ready --timeout=240s
+          # K3s Helm controller installs its bundled Traefik *after* nodes
+          # report Ready. Do not race the controller's first reconciliation.
+          found=false
+          for attempt in $(seq 1 90); do
+            if kubectl -n kube-system get deployment traefik >/dev/null 2>&1; then
+              found=true
+              break
+            fi
+            sleep 3
+          done
+          if [ "$found" != true ]; then
+            echo 'K3s-managed Traefik deployment did not appear' >&2
+            exit 1
+          fi
           kubectl -n kube-system rollout status deployment/traefik --timeout=300s
           k3d image import hostmarshal-k3s-ci:ci --cluster hostmarshal-m4-ci
           kubectl get nodes -o wide
