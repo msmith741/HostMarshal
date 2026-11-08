@@ -98,11 +98,11 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 
 ## M4 in-progress security evidence
 
-- `src/remote_auth.rs` verifies RS256 signatures with *pinned local* JWKS, exact HTTPS issuer/resource audience, mandatory expiration/not-before/issued-at, bounded lifetime, `at+jwt` header type and `hostmarshal.observe` scope. Unknown keys or invalid tokens deny access.
+- `src/remote_auth.rs` verifies RS256 signatures with an offline JWKS or administrator-pinned HTTPS JWKS, exact HTTPS issuer/resource audience, mandatory expiration/issued-at, optional-but-validated not-before, bounded lifetime, `at+jwt` header type and `hostmarshal.observe` scope. Unknown keys or invalid tokens deny access.
 - `src/remote_http.rs` implements a separate loopback-only stateless rmcp HTTP mode with per-request middleware identity verification, exact Host and Origin restrictions, no permissive CORS, 256 KiB body limit and POST-only access. The authenticated caller is passed to the existing coordinator for tool discovery and execution; HTTP metadata alone is never identity.
 - `src/provider_router.rs` retains no-fallback exact operation/target/purpose broker routing and scope revalidation.
 - `tests/remote_http_smoke.py` covers signature forgery, wrong issuer/audience, expired/future/oversized tokens, wrong subject permissions, forbidden Origin and Host, spoofed forwarded user, unauthorized tool arguments and unprotected config rejection. It additionally checks middleware-visible transport denial audit reasons, unverified identity placeholders and redaction (FR-021); Rust fault-injection checks fail-closed audit behavior.
-- **Not yet verified/completed:** remote-facing TLS ingress and bypass isolation, online JWKS refresh/rotation and OAuth metadata in the earlier pilot; now add a real Keycloak OIDC metadata and proxy isolation CI gate (FR-026/027). Auth-denial durable audit, distributed rate limits, Kubernetes-native identity, continuous background renewal and automatic recovery after quarantined AppRole sessions, full Vault CA rotation, production ingress/outage validation and independent remote audit. **M4 remains in progress.**
+- **Not yet verified/completed:** the actual production TLS ingress and network-policy bypass isolation, interactive OAuth/PKCE client flows, dynamic client registration, distributed rate limits, full remote audit durability, Kubernetes-native Vault identity, continuous background renewal and automatic recovery after quarantine, full Vault CA rotation, production outage response and independent security review. The disposable Keycloak/Traefik CI acceptance job (FR-026/027) validates only the reference topology. **M4 remains in progress.**
 
 ## M4 signed SSH certificate test evidence
 
