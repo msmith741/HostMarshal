@@ -17,3 +17,4 @@ pub mod provider_router;
 pub mod remote_auth;
 pub mod remote_http;
 pub mod vault_ssh;
+mod vault_auth;

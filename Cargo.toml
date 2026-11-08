@@ -25,3 +25,4 @@ jsonwebtoken = "9.3"
 
 tempfile = "3.23"
 ssh-key = { version = "0.6.7", features = ["ed25519"] }
+zeroize = "1"

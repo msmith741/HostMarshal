@@ -13,7 +13,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
-use reqwest::{Client, Url, header::HeaderValue};
+use reqwest::{Client, Url};
 use serde::Deserialize;
 use serde_json::json;
 use ssh_key::{Algorithm, Certificate, HashAlg, PublicKey, certificate::CertType};
@@ -25,6 +25,7 @@ use crate::{
     },
     declarative::CompiledConfig,
     transport::check_public_trust_file,
+    vault_auth::{AppRoleSpec, VaultAuth},
 };
 
 const OPERATION: &str = "builtin.linux.uname/v1";
@@ -37,7 +38,8 @@ const CERT_MARGIN_SECONDS: u64 = 15;
 struct VaultSshConfig {
     api_version: String,
     vault_address: String,
-    token_file: PathBuf,
+    token_file: Option<PathBuf>,
+    app_role: Option<AppRoleSpec>,
     ca_certificate_file: PathBuf,
     ssh_ca_public_key_file: PathBuf,
     mount: String,
@@ -62,7 +64,7 @@ struct TargetBinding {
 pub struct VaultSshCertificateBroker {
     client: Client,
     signing_url: Url,
-    token_file: PathBuf,
+    auth: VaultAuth,
     signing_ca: ssh_key::Fingerprint,
     ttl_seconds: u64,
     bindings: BTreeMap<String, TargetBinding>,
@@ -126,7 +128,7 @@ impl VaultSshCertificateBroker {
         );
         let signing_url = url.join(&format!("v1/{}/sign/{}", spec.mount, spec.role))?;
 
-        check_private_key_file(&spec.token_file).context("Vault token file not protected")?;
+        let auth = VaultAuth::load(&url, spec.token_file, spec.app_role)?;
         ensure!(
             spec.ca_certificate_file.is_absolute(),
             "Vault TLS CA path must be absolute"
@@ -195,7 +197,7 @@ impl VaultSshCertificateBroker {
         Ok(Self {
             client,
             signing_url,
-            token_file: spec.token_file,
+            auth,
             signing_ca,
             ttl_seconds: spec.ttl_seconds,
             bindings,
@@ -243,21 +245,9 @@ impl VaultSshCertificateBroker {
         let public_key =
             PublicKey::from_openssh(&public_string).map_err(|_| BrokerFailure::Denied)?;
 
-        // No environment-variable Vault token or forwarded MCP credential:
-        // read the protected OS-controlled token file at each issuance for
-        // operator-driven rotation; never log token or raw response.
-        check_private_key_file(&self.token_file).map_err(|_| BrokerFailure::Unavailable)?;
-        let raw_token =
-            fs::read_to_string(&self.token_file).map_err(|_| BrokerFailure::Unavailable)?;
-        let token = raw_token.trim_end_matches(['\r', '\n']);
-        if token.is_empty()
-            || token.len() > 4096
-            || !token.bytes().all(|byte| byte.is_ascii_graphic())
-        {
-            return Err(BrokerFailure::Denied);
-        }
-        let mut token_header = HeaderValue::from_str(token).map_err(|_| BrokerFailure::Denied)?;
-        token_header.set_sensitive(true);
+        // Trusted launcher owns the exact authentication source. No
+        // client-supplied Vault URLs, tokens, or role selection.
+        let token_header = self.auth.token(&self.client).await?;
         let response = self
             .client
             .post(self.signing_url.clone())
@@ -276,6 +266,12 @@ impl VaultSshCertificateBroker {
             .await
             .map_err(|_| BrokerFailure::Unavailable)?;
         if !response.status().is_success() {
+            if matches!(
+                response.status(),
+                reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN
+            ) {
+                self.auth.quarantine().await;
+            }
             return Err(BrokerFailure::Denied);
         }
 
