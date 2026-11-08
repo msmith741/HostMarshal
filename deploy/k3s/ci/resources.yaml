@@ -62,9 +62,10 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
-              # Required only in the one-shot init to chown 0600 trust files
-              # for UID 10001. Both long-running containers retain drop: ALL.
-              add: [CHOWN]
+              # One-shot init requires CHOWN for UID 10001 ownership and
+              # FOWNER for chmod on a Kubernetes-mounted memory volume.
+              # Both long-running containers retain drop: ALL.
+              add: [CHOWN, FOWNER]
           volumeMounts:
             - name: identity
               mountPath: /identity
