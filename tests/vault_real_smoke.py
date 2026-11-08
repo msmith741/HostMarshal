@@ -232,6 +232,99 @@ def main():
             assert denied.get("isError") is True, denied
             assert not list(ephemeral.iterdir())
 
+            # AppRole is a separate, explicit authentication mode. Its
+            # restricted service token can sign and renew itself, not list
+            # mounts or manage other tokens/roles.
+            api("POST", "sys/auth/approle", {"type": "approle"}, root_token)
+            api("POST", "auth/approle/role/hostmarshal", {
+                "bind_secret_id": True,
+                "secret_id_num_uses": 0,
+                "token_no_default_policy": True,
+                "token_policies": ["hostmarshal-sign-only"],
+                "token_type": "service",
+                "token_ttl": "90s",
+                "token_max_ttl": "6m",
+            }, root_token)
+            role_id = api("GET", "auth/approle/role/hostmarshal/role-id",
+                          token=root_token)["data"]["role_id"]
+            secret_id = api("POST", "auth/approle/role/hostmarshal/secret-id",
+                            {}, root_token)["data"]["secret_id"]
+            role_file = root / "approle-role-id"
+            secret_file = root / "approle-secret-id"
+            role_file.write_text(role_id)
+            secret_file.write_text(secret_id)
+            role_file.chmod(0o600)
+            secret_file.chmod(0o600)
+
+            # No change in grants/adapter or ability to use arbitrary API paths.
+            # Revocation of renewal rights must be sticky even after restore.
+            renewable_policy = (
+                'path "ssh/sign/read-only" { capabilities = ["create", "update"] }\n'
+                'path "auth/token/renew-self" { capabilities = ["create", "update"] }'
+            )
+            api("PUT", "sys/policies/acl/hostmarshal-sign-only",
+                {"policy": renewable_policy}, root_token)
+            app_cfg = json.loads(signer_config.read_text())
+            app_cfg.pop("tokenFile")
+            app_cfg["appRole"] = {
+                "authMount": "approle",
+                "roleIdFile": str(role_file),
+                "secretIdFile": str(secret_file),
+                "expectedPolicy": "hostmarshal-sign-only",
+                # Exceeds 90-second TTL intentionally: every subsequent call
+                # must exercise renew-self, rather than silently using a cache.
+                "renewBeforeSeconds": 120,
+            }
+            app_config = root / "vault-approle.json"
+            app_config.write_text(json.dumps(app_cfg))
+            app_config.chmod(0o600)
+
+            # Fail at configuration load on ambiguous/static fallback sources.
+            both = dict(app_cfg)
+            both["tokenFile"] = str(token_file)
+            bad_config = root / "vault-invalid-auth.json"
+            bad_config.write_text(json.dumps(both))
+            bad_config.chmod(0o600)
+            invalid = subprocess.run([
+                str(BIN), "--config-dir", str(config),
+                "--principal", "example-operator",
+                "--vault-ssh-config", str(bad_config),
+            ], capture_output=True, text=True, timeout=8)
+            assert invalid.returncode != 0 and "exactly one" in invalid.stderr
+            # Shutdown the separate token-file session before testing AppRole.
+            process.stdin.close()
+            process.wait(timeout=6)
+            process = None
+            app_audit = root / "approle-audit.jsonl"
+            process = subprocess.Popen([
+                str(BIN), "--config-dir", str(config),
+                "--principal", "example-operator",
+                "--vault-ssh-config", str(app_config),
+                "--audit-log", str(app_audit),
+            ], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, bufsize=1, env=environment)
+            app_client = MCP(process)
+            def observe_app(expected):
+                result = app_client.tool("linux.uname", TARGET)
+                assert (result.get("isError") is not True) == expected, result
+                if expected:
+                    assert result["structuredContent"] == {"id": TARGET, "os": "Linux"}
+                assert not list(ephemeral.iterdir())
+            observe_app(True)   # AppRole login obtains first restricted token
+            observe_app(True)   # renew-self must work for a reusable session
+            api("PUT", "sys/policies/acl/hostmarshal-sign-only",
+                {"policy": policy}, root_token)
+            observe_app(False)  # failed renew-self quarantines token
+            api("PUT", "sys/policies/acl/hostmarshal-sign-only",
+                {"policy": renewable_policy}, root_token)
+            observe_app(False)  # must NOT silently re-login with SecretID
+            app_text = app_audit.read_text()
+            for value in (role_id, secret_id, root_token, restricted, replacement):
+                assert value not in app_text, "Vault credential leaked to audit"
+            process.stdin.close()
+            process.wait(timeout=6)
+            process = None
+
             subprocess.run(
                 ["docker", "stop", container],
                 check=True, capture_output=True, timeout=20,
