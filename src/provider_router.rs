@@ -22,8 +22,9 @@ impl ProviderRoute {
         for field in [operation, target, purpose] {
             ensure!(
                 field.len() <= 128
-                    && field.bytes().all(|b| b.is_ascii_alphanumeric()
-                        || matches!(b, b'-' | b'_' | b'.' | b'/')),
+                    && field.bytes().all(
+                        |b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'/')
+                    ),
                 "invalid credential provider route"
             );
         }
@@ -51,7 +52,9 @@ pub struct RoutedCredentialBroker {
 
 impl RoutedCredentialBroker {
     pub fn new() -> Self {
-        Self { providers: BTreeMap::new() }
+        Self {
+            providers: BTreeMap::new(),
+        }
     }
 
     /// Only the trusted startup configuration may call this method.
@@ -108,7 +111,8 @@ mod tests {
         fn acquire(
             &self,
             scope: CredentialScope,
-        ) -> Pin<Box<dyn Future<Output = Result<CredentialLease, BrokerFailure>> + Send + '_>> {
+        ) -> Pin<Box<dyn Future<Output = Result<CredentialLease, BrokerFailure>> + Send + '_>>
+        {
             Box::pin(async move {
                 self.calls.fetch_add(1, Ordering::SeqCst);
                 if let Some(failure) = self.failure {
@@ -136,17 +140,41 @@ mod tests {
     async fn exact_route_required_and_no_cross_target_access() {
         let calls = Arc::new(AtomicUsize::new(0));
         let mut router = RoutedCredentialBroker::new();
-        router.register(route("host-a"), Arc::new(TestProvider {
-            calls: Arc::clone(&calls), failure: None, wrong_target: false,
-        })).unwrap();
+        router
+            .register(
+                route("host-a"),
+                Arc::new(TestProvider {
+                    calls: Arc::clone(&calls),
+                    failure: None,
+                    wrong_target: false,
+                }),
+            )
+            .unwrap();
         assert!(router.acquire(scope("host-a")).await.is_ok());
-        assert!(matches!(router.acquire(scope("host-b")).await, Err(BrokerFailure::Denied)));
-        assert!(matches!(router.acquire(
-            CredentialScope::new("builtin.https.health/v1", "host-a", "ssh-observe")
-        ).await, Err(BrokerFailure::Denied)));
-        assert!(matches!(router.acquire(
-            CredentialScope::new("builtin.linux.uname/v1", "host-a", "other-purpose")
-        ).await, Err(BrokerFailure::Denied)));
+        assert!(matches!(
+            router.acquire(scope("host-b")).await,
+            Err(BrokerFailure::Denied)
+        ));
+        assert!(matches!(
+            router
+                .acquire(CredentialScope::new(
+                    "builtin.https.health/v1",
+                    "host-a",
+                    "ssh-observe"
+                ))
+                .await,
+            Err(BrokerFailure::Denied)
+        ));
+        assert!(matches!(
+            router
+                .acquire(CredentialScope::new(
+                    "builtin.linux.uname/v1",
+                    "host-a",
+                    "other-purpose"
+                ))
+                .await,
+            Err(BrokerFailure::Denied)
+        ));
         assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 
@@ -154,7 +182,8 @@ mod tests {
     async fn duplicate_routes_rejected_and_provider_outage_does_not_fallback() {
         let calls = Arc::new(AtomicUsize::new(0));
         let provider = Arc::new(TestProvider {
-            calls: Arc::clone(&calls), failure: Some(BrokerFailure::Unavailable),
+            calls: Arc::clone(&calls),
+            failure: Some(BrokerFailure::Unavailable),
             wrong_target: false,
         });
         let mut router = RoutedCredentialBroker::new();
@@ -170,11 +199,16 @@ mod tests {
     #[tokio::test]
     async fn mismatched_provider_lease_is_rejected() {
         let mut router = RoutedCredentialBroker::new();
-        router.register(route("host-a"), Arc::new(TestProvider {
-            calls: Arc::new(AtomicUsize::new(0)),
-            failure: None,
-            wrong_target: true,
-        })).unwrap();
+        router
+            .register(
+                route("host-a"),
+                Arc::new(TestProvider {
+                    calls: Arc::new(AtomicUsize::new(0)),
+                    failure: None,
+                    wrong_target: true,
+                }),
+            )
+            .unwrap();
         assert!(matches!(
             router.acquire(scope("host-a")).await,
             Err(BrokerFailure::Denied)
