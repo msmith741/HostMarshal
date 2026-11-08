@@ -18,16 +18,13 @@ use rmcp::{
     },
     service::RequestContext,
     transport::streamable_http_server::{
-        StreamableHttpServerConfig, StreamableHttpService,
-        session::local::LocalSessionManager,
+        StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
     },
 };
 use tower_http::limit::RequestBodyLimitLayer;
 
 use crate::{
-    dynamic_mcp::DeclarativeMcp,
-    identity::AuthenticatedCaller,
-    remote_auth::RemoteJwtVerifier,
+    dynamic_mcp::DeclarativeMcp, identity::AuthenticatedCaller, remote_auth::RemoteJwtVerifier,
     runtime::ExecutionCoordinator,
 };
 
@@ -94,7 +91,10 @@ async fn require_bearer(
     if request.method() != Method::POST {
         return StatusCode::METHOD_NOT_ALLOWED.into_response();
     }
-    let host = request.headers().get(header::HOST).and_then(|v| v.to_str().ok());
+    let host = request
+        .headers()
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok());
     if host != Some(verifier.allowed_host()) {
         return StatusCode::BAD_REQUEST.into_response();
     }
@@ -123,9 +123,13 @@ async fn require_bearer(
 fn unauthorized() -> Response {
     (
         StatusCode::UNAUTHORIZED,
-        [(header::WWW_AUTHENTICATE, "Bearer realm=\"hostmarshal\", error=\"invalid_token\"")],
+        [(
+            header::WWW_AUTHENTICATE,
+            "Bearer realm=\"hostmarshal\", error=\"invalid_token\"",
+        )],
         "authentication required",
-    ).into_response()
+    )
+        .into_response()
 }
 
 pub async fn serve_loopback(
@@ -133,9 +137,16 @@ pub async fn serve_loopback(
     runtime: Arc<ExecutionCoordinator>,
     verifier: Arc<RemoteJwtVerifier>,
 ) -> Result<()> {
-    ensure!(address.ip().is_loopback(), "remote HTTP listener must bind loopback only");
+    ensure!(
+        address.ip().is_loopback(),
+        "remote HTTP listener must bind loopback only"
+    );
     let service = StreamableHttpService::new(
-        move || Ok(AuthenticatedRemoteMcp { runtime: Arc::clone(&runtime) }),
+        move || {
+            Ok(AuthenticatedRemoteMcp {
+                runtime: Arc::clone(&runtime),
+            })
+        },
         LocalSessionManager::default().into(),
         StreamableHttpServerConfig::default()
             .with_legacy_session_mode(false)
