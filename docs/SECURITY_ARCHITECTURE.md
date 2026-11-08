@@ -64,7 +64,7 @@ HTTP GET can mutate state; arbitrary read-only declarations are **not** a safety
 | Host key or TLS identity changes | Reject connection until trusted identity reestablished |
 | Credential backend unavailable | Do not fall back to long-lived broad secrets |
 | Output/log contains secret | Redact/classify; never log raw auth headers or tokens |
-| Audit sink fails during privileged operation | Defined fail-closed pre-execution commitment for mandatory-audit classes |
+| Audit sink fails during privileged operation | Defined fail-closed pre-execution commitment for mandatory-audit classes; the M4 HTTP middleware also returns 503 when a rejected-request denial cannot be committed |
 | Config reload partially fails | Atomic in-memory activation after full validation; SIGUSR1 emergency-deny on Unix or stop the process |
 
 ## Operation classes

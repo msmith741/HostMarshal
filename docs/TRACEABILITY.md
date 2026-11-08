@@ -26,6 +26,7 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 | FR-018 remote HTTP identity | ADR-0007, ADR-0012 | `src/remote_auth.rs`, `src/remote_http.rs`, `src/identity.rs`, `src/main.rs` | `tests/remote_http_smoke.py` disposable RSA/JWKS and negative token/HTTP tests | In progress — stateless signed-JWT loopback transport; no dynamic JWKS/metadata or TLS ingress implementation |
 | FR-019 provider routing | ADR-0008, ADR-0012 | `src/provider_router.rs`, `src/main.rs` | provider-route unit tests; mixed-provider launch denial and Vault outage integration | In progress — exclusive Vault vs static-key selection, no coactive external backend registry |
 | FR-020 Vault SSH signing | ADR-0008, ADR-0012 | `src/vault_ssh.rs`, `src/credentials.rs`, `src/runtime.rs`, `src/observation.rs` | lease cleanup unit test, `tests/vault_ssh_smoke.py` | In progress — disposable Vault-compatible TLS signer + real SSH CA/sshd, real Vault and workload identity unverified |
+| FR-021 HTTP denial audit | ADR-0008, ADR-0012 | `src/runtime.rs::audit_http_denial`, `src/remote_http.rs::require_bearer` | `runtime::tests::http_denial_audits_only_verified_caller_and_fails_closed`, `tests/remote_http_smoke.py` | In progress — middleware-visible authentication and protocol rejections audited; parser-level failures before middleware, external proxy events and sink durability beyond the local file are not covered |
 
 ## ADR implementation matrix
 
@@ -94,7 +95,7 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 - `src/remote_auth.rs` verifies RS256 signatures with *pinned local* JWKS, exact HTTPS issuer/resource audience, mandatory expiration/not-before/issued-at, bounded lifetime, `at+jwt` header type and `hostmarshal.observe` scope. Unknown keys or invalid tokens deny access.
 - `src/remote_http.rs` implements a separate loopback-only stateless rmcp HTTP mode with per-request middleware identity verification, exact Host and Origin restrictions, no permissive CORS, 256 KiB body limit and POST-only access. The authenticated caller is passed to the existing coordinator for tool discovery and execution; HTTP metadata alone is never identity.
 - `src/provider_router.rs` retains no-fallback exact operation/target/purpose broker routing and scope revalidation.
-- `tests/remote_http_smoke.py` covers signature forgery, wrong issuer/audience, expired/future/oversized tokens, wrong subject permissions, forbidden Origin and Host, spoofed forwarded user, unauthorized tool arguments and unprotected config rejection.
+- `tests/remote_http_smoke.py` covers signature forgery, wrong issuer/audience, expired/future/oversized tokens, wrong subject permissions, forbidden Origin and Host, spoofed forwarded user, unauthorized tool arguments and unprotected config rejection. It additionally checks middleware-visible transport denial audit reasons, unverified identity placeholders and redaction (FR-021); Rust fault-injection checks fail-closed audit behavior.
 - **Not yet verified/completed:** remote-facing TLS ingress and bypass isolation, online JWKS refresh/rotation and OAuth metadata, auth-denial durable audit, distributed rate limits, actual Vault dev-server signing with workload login/renewal and independent remote audit. **M4 remains in progress.**
 
 ## M4 signed SSH certificate test evidence

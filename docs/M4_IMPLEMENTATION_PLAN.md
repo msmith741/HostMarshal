@@ -21,9 +21,9 @@
 
 ### Phase B vertical-slice progress
 
-The project now includes a loopback-only HTTP MCP listener with signed access-token validation using a pinned, local JWKS. Verification is per request; the SDK passes a trusted identity extension into the existing execution coordinator. Test coverage includes forged/expired/wrong-audience tokens, subject isolation and common HTTP header bypasses.
+The project now includes a loopback-only HTTP MCP listener with signed access-token validation using a pinned, local JWKS. Verification is per request; the SDK passes a trusted identity extension into the existing execution coordinator. Test coverage includes forged/expired/wrong-audience tokens, subject isolation and common HTTP header bypasses. The middleware also writes redacted, reason-coded denial events to the same configured sink, preserves verified/unverified identity boundaries and returns HTTP 503 if it cannot record a rejection. The HTTP parser and upstream proxy remain outside that audit boundary.
 
-**Still blocking phase-B completion:** online JWKS renewal/rotation, external TLS ingress proof and bypass isolation, authorization-server/protected-resource metadata, HTTP request/denial auditing and more extensive concurrency/availability tests. No internet-facing listener is enabled.
+**Still blocking phase-B completion:** online JWKS renewal/rotation, external TLS ingress proof and bypass isolation, authorization-server/protected-resource metadata, full lifecycle/request audit coverage beyond middleware-visible denials, and more extensive concurrency/availability tests. No internet-facing listener is enabled.
 
 ## Phase C — Vault SSH certificate provider
 

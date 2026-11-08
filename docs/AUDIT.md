@@ -1,6 +1,6 @@
 # Audit events and operational guidance
 
-**Status:** M2 implements structured audit events for the declarative stdio execution runtime; M3 network observations use the same preexecution and terminal auditing, without returning raw network responses or private-key data. An audit event is evidence of what the process attempted and recorded; local files are **not** tamper-evident.
+**Status:** M2 implements structured audit events for the declarative stdio execution runtime; M3 network observations use the same preexecution and terminal auditing, without returning raw network responses or private-key data. The experimental M4 HTTP listener also audits middleware-visible authentication and protocol rejections. An audit event is evidence of what the process attempted and recorded; local files are **not** tamper-evident.
 
 ## Event lifecycle
 
@@ -10,6 +10,8 @@
 - **failed** — broker, adapter, timeout or output-validation failure; reason codes are stable and do not include exception details.
 
 Each event carries `timestampMs`, `requestId`, `issuer`, `subject`, `capability`, `operation`, `target`, `snapshotDigest`, `phase`, and `reason`. Denied unresolved input identifiers are sanitized. Events do **not** include arbitrary tool arguments, outputs, authentication headers, credential handles, adapter errors or secret values.
+
+For the **M4 experimental HTTP listener**, middleware-visible rejections (method, Host, Origin, missing/duplicate/invalid bearer, or downstream HTTP 4xx/5xx protocol failure) are recorded as `denied` with a fresh `requestId`, `operation=transport.mcp.http/v1`, `capability=<transport>`, and `target=<unresolved>`. Before signature verification, both `issuer` and `subject` are the literal sentinel `<unverified>`; raw Authorization, token claims, header values and request bodies never enter these events. A rejection occurring **after successful JWT authentication** records the verified issuer and subject. If the rejection event cannot be written, the middleware responds with **HTTP 503** rather than its ordinary 400/401/403/405/413 reply. Runtime tool invocations continue to have their own precommit/terminal records. HTTP parser failures occurring before middleware, reverse-proxy refusals and disconnected clients are not guaranteed to produce an in-process audit event; instrument the ingress independently.
 
 The pre-execution and terminal events share a request ID. Current stderr/file sinks use synchronous I/O (including file synchronization), which can block on a stalled destination; use protected local storage, and do not claim bounded audit latency or support for untrusted network filesystems. Async/isolated audit providers require a separate release gate. A protected operation never runs if the **authorized** record cannot be committed. If a completion record cannot be committed, the runtime returns `audit unavailable` rather than the output; this cannot reverse any side effect, which is why M2 allows only static observation.
 
@@ -32,4 +34,4 @@ On Unix the file is created mode **0600**, existing group/world-readable files a
 
 ## Verification
 
-`tests/audit_smoke.py` checks the actual MCP wire + synchronized file, correlation between precommit/terminal records, denied calls, redaction, and file permissions. In-memory audit sink fault-injection tests enforce deny-on-precommit-failure and no-output-on-terminal-failure. Audit sink implementations should be subjected to additional fault injection before supporting any privileged operation.
+`tests/audit_smoke.py` checks the actual MCP wire + synchronized file, correlation between precommit/terminal records, denied calls, redaction, and file permissions. `tests/remote_http_smoke.py` verifies audit records for rejected network requests, no unverified identity attribution, reason-code coverage, and token redaction. `runtime::tests::http_denial_audits_only_verified_caller_and_fails_closed` injects an audit sink failure. In-memory audit sink fault-injection tests enforce deny-on-precommit-failure and no-output-on-terminal-failure. Audit sink implementations should be subjected to additional fault injection before supporting any privileged operation.

@@ -38,6 +38,7 @@ HostMarshal provides **typed, authorized, auditable infrastructure operations** 
 | FR-018 | Verify remote MCP identity independently on each HTTP request with signed access tokens, issuer/audience/scope/lifetime constraints and default-deny tool grants | M4 |
 | FR-019 | Route credential acquisition by exact approved operation/target/purpose without fallback across providers | M4 |
 | FR-020 | Issue verified short-lived SSH user certificates through a scoped Vault SSH signing provider, with ephemeral key lifecycle, strict principal/key/CA/TTL checks and no fallback | M4 |
+| FR-021 | Audit HTTP authentication and transport/protocol rejections with sanitized reason codes and no unverified identity attribution; fail closed on rejection-audit failure | M4 |
 
 ## Non-functional requirements
 

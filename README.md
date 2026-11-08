@@ -49,7 +49,7 @@ Structured audit events go to stderr by default; for a local synchronized JSONL 
 
 ## M4 experimental authenticated HTTP MCP
 
-A new, separate loopback-only `http` CLI mode authenticates each request with an administrator-pinned RS256 JWKS and exact issuer/audience, validates JWT lifetime/scope and binds the verified subject to the existing authorization coordinator. The public-facing HTTPS/TLS reverse proxy must be separately configured and protected. This is **not** a full OIDC discovery, key-rotation or Vault credential integration; M4 remains unfinished.
+A new, separate loopback-only `http` CLI mode authenticates each request with an administrator-pinned RS256 JWKS and exact issuer/audience, validates JWT lifetime/scope and binds the verified subject to the existing authorization coordinator. Middleware-visible HTTP authentication and protocol denials are now audited without trusting unverified identity claims; rejection-audit failure produces HTTP 503. The public-facing HTTPS/TLS reverse proxy must be separately configured and protected. This is **not** a full OIDC discovery, key-rotation or Vault credential integration; M4 remains unfinished.
 
 See [Remote MCP deployment and threat model](docs/REMOTE_MCP.md) and [M4 acceptance gates](docs/M4_IMPLEMENTATION_PLAN.md).
 

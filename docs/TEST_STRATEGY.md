@@ -72,7 +72,7 @@ Unit tests enforce network-hostname validation, typed operation allowlist and gr
 
 ## M4 experimental remote identity testing
 
-`tests/remote_http_smoke.py` creates disposable RSA keys and a pinned JWKS, starts the loopback-only MCP HTTP listener and verifies signed-token success, subject-scoped tool visibility, denied target/argument calls, forged signature, wrong issuer/audience/key, expired/not-yet-valid/overlong tokens, missing observe scope, Host/Origin rejection, forwarded-header spoofing, oversized request denial, non-loopback listener rejection and protected auth file ACL. Existing stdio/M2/M3 tests still exercise the same coordinator. A pinned local JWKS does not validate online issuer key rotation; test that in a later M4 gate.
+`tests/remote_http_smoke.py` creates disposable RSA keys and a pinned JWKS, starts the loopback-only MCP HTTP listener and verifies signed-token success, subject-scoped tool visibility, denied target/argument calls, forged signature, wrong issuer/audience/key, expired/not-yet-valid/overlong tokens, missing observe scope, Host/Origin rejection, forwarded-header spoofing, oversized request denial, non-loopback listener rejection and protected auth file ACL. The FR-021 assertions check redacted authentication and protocol-denial audit records and unique IDs. A Rust sink-fault injection test enforces rejection-audit failure propagation; upstream proxy/early parser coverage is not claimed. Existing stdio/M2/M3 tests still exercise the same coordinator. A pinned local JWKS does not validate online issuer key rotation; test that in a later M4 gate.
 
 ## M4 Vault SSH signer and lease test suite
 
