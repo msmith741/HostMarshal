@@ -35,6 +35,20 @@ HostMarshal provides **typed, authorized, auditable infrastructure operations** 
 | FR-015 | Lock application dependencies and exercise parser fuzzing and supported MCP eras | M1 |
 | FR-016 | Enforce pinned SSH host identity, dedicated target-scoped key access, fixed Linux observation and bounded output | M3 |
 | FR-017 | Enforce approved HTTPS-only health probes, validated TLS identity, no redirects/proxies or untrusted response-body exposure | M3 |
+| FR-018 | Verify remote MCP identity independently on each HTTP request with signed access tokens, issuer/audience/scope/lifetime constraints and default-deny tool grants | M4 |
+| FR-019 | Route credential acquisition by exact approved operation/target/purpose without fallback across providers | M4 |
+| FR-020 | Issue verified short-lived SSH user certificates through a scoped Vault SSH signing provider, with ephemeral key lifecycle, strict principal/key/CA/TTL checks and no fallback | M4 |
+| FR-021 | Audit HTTP authentication and transport/protocol rejections with sanitized reason codes and no unverified identity attribution; fail closed on rejection-audit failure | M4 |
+| FR-022 | Authenticate a Vault SSH signing workload with protected AppRole credentials, exact token policy and bounded on-demand self-renewal; quarantine on renewal/token rejection without static-token fallback | M4 |
+| FR-023 | Rotate remote JWT verification keys from an administrator-pinned HTTPS JWKS endpoint with pinned CA, strict key validation, bounded refresh, and no stale-on-error fallback | M4 |
+| FR-024 | Publish RFC 9728 OAuth protected-resource metadata and a resource_metadata-bearing 401 challenge without treating discovery as authentication | M4 |
+| FR-025 | Require authenticated local reverse-proxy attestation for ingress mode (HTTPS scheme, exact public Host, protected proof) and deny direct-backend bypass, with sanitized audit | M4 |
+| FR-026 | Verify administrator-pinned OAuth/OIDC authorization-server discovery over trusted HTTPS at startup, including exact issuer, JWKS URI, endpoint origin, and supported machine-client grant; reject mismatched metadata | M4 |
+| FR-027 | Test a production-shaped TLS reverse proxy and isolated MCP backend against a real OAuth issuer, covering token acquisition, issuer/audience/scope checks, TLS trust and network bypass via independent CI | M4 |
+| FR-028 | Validate real K3s multi-node Flannel, K3s-managed Traefik, and an isolated local-only HostMarshal deployment in disposable CI without any private cluster access | M4 |
+| FR-029 | Maintain HostMarshal loopback binding inside an unprivileged Kubernetes Pod sidecar boundary, with TLS public Host routing, protected ingress attestation and a ClusterIP-only service | M4 |
+| FR-030 | Prove cross-node/namespace NetworkPolicy isolation with positive connectivity controls, a deliberately unsafe additive-policy positive control, and restored denial after rollback | M4 |
+| FR-031 | Authenticate optional Vault SSH-signing workloads using an administrator-selected, externally issued JWT and Vault's role-bound JWT auth method; pin Vault TLS, require exclusive credential source and exact renewable lease policy, quarantine on failure, and do not expose or log tokens | M4 |
 
 ## Non-functional requirements
 

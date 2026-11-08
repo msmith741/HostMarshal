@@ -10,8 +10,11 @@ use hostmarshal::{
     declarative::CompiledConfig,
     dynamic_mcp::DeclarativeMcp,
     identity::AuthenticatedCaller,
+    remote_auth::RemoteJwtVerifier,
+    remote_http,
     runtime::ExecutionCoordinator,
     snapshot::ConfigStore,
+    vault_ssh::VaultSshCertificateBroker,
 };
 use rmcp::{ServiceExt, transport::stdio};
 
@@ -99,11 +102,47 @@ async fn main() -> Result<()> {
             );
             Ok(())
         }
+        [
+            http,
+            listen_flag,
+            address,
+            config_flag,
+            directory,
+            auth_flag,
+            auth_file,
+            options @ ..,
+        ] if http == "http"
+            && listen_flag == "--listen"
+            && config_flag == "--config-dir"
+            && auth_flag == "--auth-config" =>
+        {
+            let mut audit_file = None;
+            let mut ssh_map = None;
+            let mut vault_ssh = None;
+            let mut remaining = options;
+            while !remaining.is_empty() {
+                let [flag, value, rest @ ..] = remaining else {
+                    bail!("missing HTTP server option value");
+                };
+                match flag.as_str() {
+                    "--audit-log" if audit_file.is_none() => audit_file = Some(value.as_str()),
+                    "--ssh-credential-map" if ssh_map.is_none() => ssh_map = Some(value.as_str()),
+                    "--vault-ssh-config" if vault_ssh.is_none() => vault_ssh = Some(value.as_str()),
+                    _ => bail!("unknown or repeated HTTP server option"),
+                };
+                remaining = rest;
+            }
+            serve_remote_http(
+                address, directory, auth_file, audit_file, ssh_map, vault_ssh,
+            )
+            .await
+        }
         [flag, directory, principal_flag, principal, rest @ ..]
             if flag == "--config-dir" && principal_flag == "--principal" =>
         {
             let mut audit_path = None;
             let mut ssh_map = None;
+            let mut vault_ssh = None;
             let mut remaining = rest;
             while !remaining.is_empty() {
                 let [option, value, tail @ ..] = remaining else {
@@ -112,11 +151,12 @@ async fn main() -> Result<()> {
                 match option.as_str() {
                     "--audit-log" if audit_path.is_none() => audit_path = Some(value.as_str()),
                     "--ssh-credential-map" if ssh_map.is_none() => ssh_map = Some(value.as_str()),
+                    "--vault-ssh-config" if vault_ssh.is_none() => vault_ssh = Some(value.as_str()),
                     _ => bail!("unknown or duplicate server option"),
                 };
                 remaining = tail;
             }
-            serve_declarative(directory, principal, audit_path, ssh_map).await
+            serve_declarative(directory, principal, audit_path, ssh_map, vault_ssh).await
         }
         _ => bail!(
             "usage: hostmarshal config validate <directory> | \
@@ -124,9 +164,12 @@ async fn main() -> Result<()> {
              hostmarshal config schema | \
              hostmarshal policy explain <directory> --subject <launcher-subject> \
                  --capability <name> --target <host-id> | \
+             hostmarshal http --listen <127.0.0.1:port> --config-dir <directory> \
+                 --auth-config <protected-json-file> [--audit-log <file>] \
+                 [--ssh-credential-map <file> | --vault-ssh-config <file>] | \
              hostmarshal --config-dir <directory> --principal <trusted-launcher-subject> \
              [--audit-log <protected-file-path>] \
-             [--ssh-credential-map <protected-json-file>] | \
+             [--ssh-credential-map <protected-json-file> | --vault-ssh-config <file>] | \
              Use YAML resources; legacy --config JSON mode has been retired"
         ),
     }
@@ -137,19 +180,17 @@ async fn serve_declarative(
     principal: &str,
     audit_path: Option<&str>,
     ssh_map: Option<&str>,
+    vault_ssh: Option<&str>,
 ) -> Result<()> {
     // Caller identity and audit destination are bound by the trusted launcher.
     // No MCP message can choose or modify either value.
     let caller = AuthenticatedCaller::from_trusted_launcher(principal)?;
     let config = CompiledConfig::load(Path::new(directory))?;
+    let broker = choose_broker(&config, ssh_map, vault_ssh)?;
     let store = Arc::new(ConfigStore::new(config));
     let audit: Arc<dyn AuditSink> = match audit_path {
         Some(path) => Arc::new(JsonlFileAudit::open(Path::new(path))?),
         None => Arc::new(StderrAudit),
-    };
-    let broker: Arc<dyn CredentialBroker> = match ssh_map {
-        Some(path) => Arc::new(LocalSshKeyBroker::load(Path::new(path))?),
-        None => Arc::new(DenyCredentialBroker),
     };
     let runtime = Arc::new(ExecutionCoordinator::new(Arc::clone(&store), broker, audit));
     #[cfg(unix)]
@@ -196,4 +237,56 @@ fn register_reload_signals(store: Arc<ConfigStore>, directory: PathBuf) -> Resul
         }
     });
     Ok(())
+}
+
+async fn serve_remote_http(
+    listen: &str,
+    directory: &str,
+    auth_file: &str,
+    audit_path: Option<&str>,
+    ssh_map: Option<&str>,
+    vault_ssh: Option<&str>,
+) -> Result<()> {
+    use std::net::SocketAddr;
+
+    let address: SocketAddr = listen.parse()?;
+    // Bind loopback only. External clients must come through a separately
+    // secured TLS reverse proxy; no X-Forwarded-User authentication shortcut.
+    anyhow::ensure!(
+        address.ip().is_loopback(),
+        "HTTP MCP must listen on loopback"
+    );
+    let verifier = Arc::new(RemoteJwtVerifier::load(Path::new(auth_file))?);
+    verifier.validate_authorization_server().await?;
+    let config = CompiledConfig::load(Path::new(directory))?;
+    let broker = choose_broker(&config, ssh_map, vault_ssh)?;
+    let store = Arc::new(ConfigStore::new(config));
+    let audit: Arc<dyn AuditSink> = match audit_path {
+        Some(path) => Arc::new(JsonlFileAudit::open(Path::new(path))?),
+        None => Arc::new(StderrAudit),
+    };
+    let runtime = Arc::new(ExecutionCoordinator::new(Arc::clone(&store), broker, audit));
+    #[cfg(unix)]
+    register_reload_signals(store, PathBuf::from(directory))?;
+    remote_http::serve_loopback(address, runtime, verifier).await
+}
+
+fn choose_broker(
+    config: &CompiledConfig,
+    ssh_map: Option<&str>,
+    vault_ssh: Option<&str>,
+) -> Result<Arc<dyn CredentialBroker>> {
+    anyhow::ensure!(
+        ssh_map.is_none() || vault_ssh.is_none(),
+        "choose exactly one SSH credential source; no fallback is permitted"
+    );
+    match (ssh_map, vault_ssh) {
+        (Some(path), None) => Ok(Arc::new(LocalSshKeyBroker::load(Path::new(path))?)),
+        (None, Some(path)) => Ok(Arc::new(VaultSshCertificateBroker::load(
+            Path::new(path),
+            config,
+        )?)),
+        (None, None) => Ok(Arc::new(DenyCredentialBroker)),
+        (Some(_), Some(_)) => unreachable!("conflicting sources rejected"),
+    }
 }

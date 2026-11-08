@@ -1,11 +1,11 @@
 # Proposed architecture
 
-**Status:** accepted ADR-0003–0008 and ADR-0011 design principles; M3 adds two audited, bounded real observation adapters. Arbitrary remote execution, writes, remote MCP authentication and external plugins remain unavailable. **Design goal:** transport independence, declarative capabilities, and security boundaries that apply to every adapter.
+**Status:** accepted ADR-0003–0008 and ADR-0011 design principles; M3 adds two audited, bounded real observation adapters. M4 introduces experimental, JWT-authenticated loopback MCP HTTP and a provider router; externally exposed TLS, full OIDC federation, real Vault interoperability/workload identity and plugins remain unfinished; an opt-in Vault-compatible SSH signing client is available. Arbitrary remote execution and writes are prohibited. **Design goal:** transport independence, declarative capabilities, and security boundaries that apply to every adapter.
 
 ## Logical diagram
 
 ~~~text
-MCP stdio / future authenticated MCP HTTP / native CLI
+MCP stdio / authenticated loopback MCP HTTP pilot / native CLI
                            |
                  Transport + identity binding
                            |
@@ -93,7 +93,7 @@ See [Capabilities](CAPABILITIES.md), [Adapters](ADAPTERS.md), [Configuration](CO
 ## Deployment profiles
 
 - **Local:** single binary, stdio, local trusted process launcher, static/packaged inventory, explicit grants.
-- **Remote (later):** authenticated MCP HTTP, listener hardening, workload identity, strict egress, secret provider, durable audit.
+- **Remote (M4 pilot):** signed-JWT loopback MCP HTTP exists; remote-facing TLS ingress, workload identity, network egress hardening and durable audit are still future gates.
 - **Containers (later):** optional distribution only; do not require Kubernetes or service meshes.
 
 ## Current bootstrap comparison

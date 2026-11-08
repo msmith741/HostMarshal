@@ -15,6 +15,10 @@
 | [0009](0009-mcp-is-a-protocol-adapter.md) | MCP as a protocol adapter | Proposed |
 | [0010](0010-versioning-and-compatibility.md) | Versioning and compatibility | Proposed |
 | [0011](0011-readonly-network-observation.md) | Restricted read-only SSH/HTTPS network observation | Accepted |
+| [0012](0012-m4-remote-identity-and-credential-providers.md) | Remote identity and provider security boundaries | Proposed |
+| [0013](0013-pinned-oidc-and-isolated-ingress.md) | Pinned OIDC and isolated HTTPS ingress | Proposed |
+| [0014](0014-disposable-k3s-isolation-acceptance.md) | Disposable K3s network isolation acceptance | Proposed |
+| [0015](0015-issuer-neutral-jwt-workload-auth.md) | Externally issued workload JWT for scoped Vault authentication | Proposed |
 
 ## How to use ADRs
 

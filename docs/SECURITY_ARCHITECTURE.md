@@ -1,6 +1,6 @@
 # Security architecture and threat model
 
-**Status:** security architecture covers M1/M2 enforcement and M3 vetted SSH/HTTPS observation controls, alongside **unimplemented** privileged/remote transport security requirements. Do not infer production assurance from this document. For disclosure see [SECURITY.md](../SECURITY.md).
+**Status:** security architecture covers M1/M2 enforcement, M3 restricted SSH/HTTPS observations and M4 JWT-authenticated loopback HTTP plus experimental Vault SSH certificate issuance; production remote transport hardening remains **unimplemented**. Do not infer production assurance from this document. For disclosure see [SECURITY.md](../SECURITY.md).
 
 ## Assets and adversaries
 
@@ -64,7 +64,7 @@ HTTP GET can mutate state; arbitrary read-only declarations are **not** a safety
 | Host key or TLS identity changes | Reject connection until trusted identity reestablished |
 | Credential backend unavailable | Do not fall back to long-lived broad secrets |
 | Output/log contains secret | Redact/classify; never log raw auth headers or tokens |
-| Audit sink fails during privileged operation | Defined fail-closed pre-execution commitment for mandatory-audit classes |
+| Audit sink fails during privileged operation | Defined fail-closed pre-execution commitment for mandatory-audit classes; the M4 HTTP middleware also returns 503 when a rejected-request denial cannot be committed |
 | Config reload partially fails | Atomic in-memory activation after full validation; SIGUSR1 emergency-deny on Unix or stop the process |
 
 ## Operation classes
@@ -87,7 +87,19 @@ The declarative stdio MCP handler now delegates all tool invocations to `Executi
 
 For each invocation, the audit sink must accept `Authorized` *before* credential access/operation execution; failures deny execution. The sink records denied and terminal outcomes with correlation IDs, operation and snapshot digests. Default stderr and optional protected local JSONL/sync-data backends are available, but the latter is **not tamper-evident** and has OS file-replacement risks. Terminal audit failure can only suppress the response, not undo an effect, which is why no mutation is permitted. See [Audit](AUDIT.md).
 
-A `CredentialBroker` interface accepts exact operation/target/purpose scopes. Without an explicit protected local SSH identity mapping, the broker denies credential requests. M3's minimal local key-path broker allows only `builtin.linux.uname/v1` for mapped targets with purpose `ssh-observe`. Real external/short-lived secret provider integration remains M4. See [M3 security design](OBSERVATION_ADAPTERS.md). External plugins, remote authentication, approvals, cancellation guarantees for privileged work and real host adapters are explicitly absent.
+A `CredentialBroker` interface accepts exact operation/target/purpose scopes. Without an explicit protected local SSH identity mapping, the broker denies credential requests. M3's minimal local key-path broker allows only `builtin.linux.uname/v1` for mapped targets with purpose `ssh-observe`. Real external/short-lived secret provider integration remains M4. See [M3 security design](OBSERVATION_ADAPTERS.md). External plugins, complete remote identity federation, approvals and cancellation guarantees for privileged work are explicitly absent. M4 only provides a pinned-JWKS loopback HTTP pilot.
+
+## M4 experimental remote MCP trust boundary
+
+The loopback-only HTTP MCP mode authenticates every request with an offline pinned or fixed-HTTPS/pinned-CA RS256 JWKS, exact issuer/resource audience, subject, lifetime and observe-only scope. Only a validated `AuthenticatedCaller` enters the authorization-aware tool discovery and execution pipeline; forwarded identity headers are ignored. The handler denies requests without a trusted request context and exposes no unauthenticated tool catalog. Host/Origin checking and bounded request bodies constrain common browser/proxy abuse.
+
+**This is not an independently authenticated public listener.** A separately managed TLS reverse proxy must secure the external endpoint and prevent direct backend access. Optional pinned-HTTPS JWKS renewal, OAuth protected-resource metadata and fixed proof-attested ingress checks now exist, but token revocation, interactive OAuth authorization-code/PKCE interoperability, production proxy isolation, external audit of pre-MCP auth errors and a **production-validated Vault SSH certificate issuer** remain unavailable. The pinned JWKS and OS file permissions are deployment trust assumptions. Do not mark M4 complete or claim production-grade remote security on this basis alone. See [Remote MCP](REMOTE_MCP.md).
+
+## M4 Vault certificate and temporary-key trust boundary
+
+The opt-in Vault broker uses a protected OS-owned signer config, fixed role/mount, verified TLS and SSH signing CAs, per-call Ed25519 keypairs, cryptographic certificate/principal/expiry validation, and lease-owned temporary files. The coordinator checks grants/audit before the broker and validity beyond the pending operation deadline. The static-key provider and Vault signer are **mutually exclusive**; a Vault outage never triggers static fallback. The SSH adapter retains host-key pinning and the fixed Linux observation.
+
+Vault authentication may use an owner-only operator token file (reread for every request) or a separate protected-file AppRole identity. AppRole tokens are checked against a single expected policy and renewable TTL; renewal occurs on demand before use, while failed renewal/auth rejection places the session in a fail-closed quarantine. This does not implement Kubernetes federation, a background renewal agent or automatic recovery after expiration. A disposable real Vault 2.2.1 TLS signer and restricted token/SSH role are covered by CI. Trusted workload login/renewal, production CA rotation, tamper-evident audit, ingress TLS, and OS egress isolation are incomplete. See [Vault SSH](VAULT_SSH.md).
 
 ## Residual risks
 
@@ -96,3 +108,29 @@ Signatures prove origin, not safety. A compromised broker/OS or overly powerful 
 ## Release security gates
 
 No live target adapter until identity, authorization, target validation, time/output bounds, and auditable outcomes are demonstrated. No third-party plugin execution without independent isolation verification. No privileged mutation or production claims without audited policy, approvals, failure testing, and documented response procedures.
+
+## FR-023–FR-025: remote issuer trust and reverse-proxy attestations
+
+The optional online verifier has a distinct administrator-fixed URL and CA, refreshes under a single async mutex on request after its bounded interval, discards previous keys on successful rotation and **does not use stale keys after refresh failure**. RFC 9728 resource metadata is public through the trusted ingress but does not create a caller. In `trustedProxy` mode, all backend calls require a protected shared ingress proof and validated forwarded HTTPS/public Host. The loopback listener cannot be reached from another host, but malicious colocated processes, a compromised proxy/proof, improper external network namespace or forged client headers passed through the ingress remain deployment risks. The CI TLS proxy fixture validates the logical protocol boundary only; it does not establish production TLS or OS isolation. See [REMOTE_MCP.md](REMOTE_MCP.md).
+
+## M4 FR-026/FR-027 — real OAuth and isolated ingress acceptance
+
+For an administrator-configured `authorizationServerMetadataUrl`, HostMarshal requires online JWKS and retrieves OIDC discovery over the *same independently pinned TLS root* used by the JWKS client. Startup fails if metadata redirects, exceeds size/time budgets, identifies a different issuer/JWKS, changes origin for OAuth endpoints or does not advertise client-credentials. Discovery is **not** a trust-on-first-use step: all issuer, CA and JWKS URL expectations are already administrator-fixed. JWTs remain independently signed/validated and are never forwarded to adapters. The `nbf` claim, optional for RFC 9068 access tokens, is validated when present; `iat` and `exp` remain mandatory and bounded.
+
+The production-shaped reference topology puts the backend on the proxy's **loopback interface inside its private network namespace**, with no separately published TCP port. Only TLS Traefik entry points are published (on loopback in CI). Keycloak is another isolated container reachable through its own TLS virtual host; its internal HTTP port is never directly published. Traefik must overwrite untrusted forwarded/proof fields, enforce exact external virtual hosts and preserve the bearer header. Docker isolation cannot guarantee Kubernetes pod network policy, host firewalling, real-world certificate maintenance, protection from compromised colocated workloads or a secret leaked by a proxy. Verify all of those during site deployment. Evidence: `tests/ingress_oidc_ci.py` and `docs/INGRESS_OAUTH_CI.md`.
+
+## M4 FR-028–FR-030 — Kubernetes sidecar trust boundary
+
+The K3s CI profile retains HostMarshal's non-negotiable **loopback-only** listener. An unprivileged local NGINX sidecar shares the Pod network namespace and forwards fixed MCP/resource-metadata paths to `127.0.0.1:8338`. It overwrites proxy-owned Host/HTTPS/ingress-proof headers and never forwards caller-provided identity as an authenticated principal. Only a ClusterIP service exposes the sidecar TCP port 8080, with ingress restricted by a K3s NetworkPolicy whose same peer element ANDs the kube-system namespace label with the Traefik Pod label. The Pod has no service-account token, uses owner-only staged auth files in a memory volume, and drops application privileges; the RSA signing private key never enters the cluster. The NGINX sidecar itself remains within the trusted computing base.
+
+Kubernetes NetworkPolicy is **additive**, and ingress restrictions are only effective if all matching policies are sufficiently narrow and the CNI actually enforces them. Accordingly the CI suite proves negative PodIP/Service paths, verifies its attacker has working network connectivity, deliberately installs an overbroad policy to **reopen** that path, and removes it to re-establish denial. It also verifies authorized TLS MCP access and denial of malformed/foreign identity, Host, Origin and TLS trust. That is stronger evidence than YAML lint or synthetic Docker bridge tests, but does not prove any production network/security property (MetalLB/host routing, compromised sidecar, CNI versions, IPv6, router VLANs, proof/cert renewal or site RBAC). See ADR-0014.
+
+**Non-root staging and verified CI scope:** The disposable K3s profile uses Pod `fsGroup: 10001` so a GID 10001 non-root init can read 0440 Secret projections and write a memory-backed runtime directory. Copied auth/proof files are owner-readable mode 0600 and independently checked by HostMarshal. Init and both runtime containers drop all Linux capabilities; no CHOWN/FOWNER escalation or root init is permitted. A manifest preflight tests these invariants before single-node authenticated-ingress smoke, and a separate multi-node job tests CNI isolation with an unsafe-policy positive control. Neither proves site-level Secret rotation or router/CNI security.
+
+**Projected configuration:** Kubernetes ConfigMap keys are symlinks by design. The unprivileged init reads only known versioned `host.yaml`, `capability.yaml` and `grant.yaml` names from a read-only projected ConfigMap, creates new ordinary files in a memory-backed volume, and mounts that materialized directory read-only at HostMarshal's `/config`. The strict HostMarshal loader continues to reject symlinks or nonregular entries, including unexpected additions.
+
+## M4 FR-031: optional external workload JWT -> Vault security boundary
+
+HostMarshal accepts `jwtAuth` only from the protected launch-time Vault SSH signer config, with a fixed, validated JWT auth mount, fixed role, constrained local JWT file path, and exact expected Vault lease policy. A projected-token symlink is acceptable **only** in the standard atomic `token -> ..data/token` form and only if it resolves inside the trusted mount directory; arbitrary symlink targets, directory escapes, group/other-writable inputs, oversized or malformed JWT strings are denied. The source JWT is never used as an MCP caller principal, signing target or Vault URL. It is forwarded once to the pinned-TLS Vault auth endpoint, whose server-side role must cryptographically bind signature, issuer, audience and subject.
+
+The resulting Vault token is **not** the MCP access token. It is an in-memory, short-lived restricted signing credential for an already-authorized SSH operation; reuse and renewal are serialized, expiry/policy/privilege failures quarantine the session, and source JWT rotation alone cannot silently bypass a quarantined lease. HostMarshal does not validate the issuer JWT signature independently; Vault must do so using configured trusted public keys/JWKS and role-bound claims. If the process/issuer/Vault role is compromised, or a co-UID attacker can mutate protected mounts, the trust boundary can fail. Proactive renewal, production token-revocation recovery, production Vault role bootstrap and auditor-independent evidence remain open. See ADR-0015 and `WORKLOAD_JWT_AUTH.md`.

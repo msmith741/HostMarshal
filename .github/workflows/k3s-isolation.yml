@@ -1,0 +1,98 @@
+name: Disposable K3s MCP isolation
+
+on:
+  # Expensive pre-release security assurance, independent of fast smoke tests.
+  pull_request:
+    paths:
+      - 'deploy/k3s/**'
+      - 'tests/k3s_cluster_ci.py'
+      - '.github/workflows/k3s-isolation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/k3s/**'
+      - 'tests/k3s_cluster_ci.py'
+      - '.github/workflows/k3s-isolation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: k3s-m4-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  k3s-security:
+    name: 3-node K3s / Traefik CNI isolation and authenticated MCP
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout source without persisting credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build locked HostMarshal binary and local-only container
+        run: |
+          set -euo pipefail
+          cargo build --locked --bin hostmarshal
+          docker build --file deploy/k3s/ci/Dockerfile --tag hostmarshal-k3s-ci:ci .
+      - name: Install pinned, checksum-verified k3d
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --retry 3 \
+            -o "$RUNNER_TEMP/k3d" \
+            https://github.com/k3d-io/k3d/releases/download/v5.9.0/k3d-linux-amd64
+          echo "06d8f25bc3a971c4eb29e0ff08429b180402db0f4dec838c9eac427e296800a0  $RUNNER_TEMP/k3d" \
+            | sha256sum --check --status
+          sudo install -m 0755 "$RUNNER_TEMP/k3d" /usr/local/bin/k3d
+          k3d version
+      - name: Start isolated three-node pinned K3s with Flannel and bundled Traefik
+        run: |
+          set -euo pipefail
+          k3d cluster create hostmarshal-m4-ci \
+            --image rancher/k3s:v1.34.5-k3s1 \
+            --servers 1 --agents 2 --wait --timeout 300s
+          kubectl wait nodes --all --for=condition=Ready --timeout=240s
+          # K3s Helm controller installs its bundled Traefik *after* nodes
+          # report Ready. Do not race the controller's first reconciliation.
+          found=false
+          for attempt in $(seq 1 90); do
+            if kubectl -n kube-system get deployment traefik >/dev/null 2>&1; then
+              found=true
+              break
+            fi
+            sleep 3
+          done
+          if [ "$found" != true ]; then
+            echo 'K3s-managed Traefik deployment did not appear' >&2
+            exit 1
+          fi
+          kubectl -n kube-system rollout status deployment/traefik --timeout=300s
+          k3d image import hostmarshal-k3s-ci:ci --cluster hostmarshal-m4-ci
+          kubectl get nodes -o wide
+      - name: Install pinned disposable test dependencies
+        run: |
+          set -euo pipefail
+          python3 -m venv .k3s-ci-venv
+          .k3s-ci-venv/bin/python -m pip install --disable-pip-version-check \
+            'PyJWT==2.10.1' 'cryptography==46.0.3'
+      - name: Deploy CI-only profile and execute real policy/ingress bypass probes
+        env:
+          HOSTMARSHAL_K3D_CLUSTER: hostmarshal-m4-ci
+          HOSTMARSHAL_K3D_BACKEND_NODE: k3d-hostmarshal-m4-ci-agent-0
+          HOSTMARSHAL_K3D_ATTACKER_NODE: k3d-hostmarshal-m4-ci-agent-1
+        run: .k3s-ci-venv/bin/python tests/k3s_cluster_ci.py --mode network
+      - name: Non-sensitive diagnostics on failure
+        if: failure()
+        run: |
+          kubectl get nodes -o wide || true
+          kubectl -n hostmarshal-ci get deploy,pods,svc,networkpolicy || true
+          kubectl -n kube-system get pods -l app.kubernetes.io/name=traefik || true
+          # The init command contains no echo/xtrace and does not print proofs.
+          kubectl -n hostmarshal-ci logs deployment/hostmarshal -c prepare-protected-config --tail=30 || true
+          # Never print server logs or Kubernetes Secret values.
+      - name: Destroy disposable K3s cluster
+        if: always()
+        run: k3d cluster delete hostmarshal-m4-ci || true

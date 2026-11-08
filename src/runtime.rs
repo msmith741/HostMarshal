@@ -71,6 +71,35 @@ impl RuntimeFailure {
     }
 }
 
+/// Sanitized, compile-time HTTP rejection categories. Client-supplied request
+/// bytes, JWT claims and headers must never become audit reason strings.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum HttpRejection {
+    Method,
+    Host,
+    Ingress,
+    Origin,
+    MissingBearer,
+    DuplicateBearer,
+    InvalidBearer,
+    Protocol,
+}
+
+impl HttpRejection {
+    fn reason_code(self) -> &'static str {
+        match self {
+            Self::Method => "http_method_rejected",
+            Self::Host => "http_host_rejected",
+            Self::Ingress => "http_ingress_rejected",
+            Self::Origin => "http_origin_rejected",
+            Self::MissingBearer => "http_missing_bearer",
+            Self::DuplicateBearer => "http_duplicate_bearer",
+            Self::InvalidBearer => "http_invalid_bearer",
+            Self::Protocol => "http_protocol_rejected",
+        }
+    }
+}
+
 pub struct ExecutionCoordinator {
     store: Arc<ConfigStore>,
     adapters: TrustedAdapterCatalog,
@@ -127,6 +156,38 @@ impl ExecutionCoordinator {
             .as_nanos();
         let n = self.sequence.fetch_add(1, Ordering::Relaxed);
         format!("{:x}-{epoch:x}-{n:016x}", std::process::id())
+    }
+
+    /// Record HTTP transport rejection with a freshly generated correlation ID.
+    /// Never infer a caller from an unverified token or untrusted HTTP headers.
+    /// Audit failure is returned to the transport to suppress its normal reply.
+    pub(crate) fn audit_http_denial(
+        &self,
+        rejection: HttpRejection,
+        caller: Option<&AuthenticatedCaller>,
+    ) -> Result<(), RuntimeFailure> {
+        let request_id = self.next_id();
+        let snapshot = self.store.snapshot();
+        let digest = snapshot
+            .as_ref()
+            .map(|s| s.snapshot_digest.as_str())
+            .unwrap_or("<locked>");
+        let context = AuditContext {
+            request_id: &request_id,
+            issuer: caller.map_or("<unverified>", AuthenticatedCaller::issuer),
+            subject: caller.map_or("<unverified>", AuthenticatedCaller::subject),
+            capability: "<transport>",
+            operation: "transport.mcp.http/v1",
+            target: "<unresolved>",
+            snapshot_digest: digest,
+        };
+        self.audit
+            .record(&AuditEvent::new(
+                context,
+                AuditPhase::Denied,
+                rejection.reason_code(),
+            ))
+            .map_err(|_| RuntimeFailure::AuditUnavailable)
     }
 
     /// Every invocation emits a denial or an authorized+terminal audit event.
@@ -295,7 +356,14 @@ impl ExecutionCoordinator {
             CredentialRequirement::Scoped { purpose } => {
                 let expected = CredentialScope::new(desc.id, &target, purpose);
                 match timeout_at(deadline, self.broker.acquire(expected.clone())).await {
-                    Ok(Ok(received)) if received.scope() == &expected => Some(received),
+                    Ok(Ok(received)) if received.scope() == &expected => {
+                        let needed = deadline.saturating_duration_since(Instant::now())
+                            + std::time::Duration::from_secs(5);
+                        if !received.valid_for(needed) {
+                            return self.fail(&event, RuntimeFailure::BrokerUnavailable);
+                        }
+                        Some(received)
+                    }
                     Err(_) => return self.fail(&event, RuntimeFailure::TimedOut),
                     _ => return self.fail(&event, RuntimeFailure::BrokerUnavailable),
                 }
@@ -437,6 +505,47 @@ mod tests {
             self.events.lock().unwrap().push(event.clone());
             Ok(())
         }
+    }
+
+    #[test]
+    fn http_denial_audits_only_verified_caller_and_fails_closed() {
+        let audit = Arc::new(MemoryAudit::new(None));
+        let runner = ExecutionCoordinator::new(
+            fixture(),
+            Arc::new(BrokerSpy::new("unavailable")),
+            audit.clone(),
+        );
+        assert_eq!(
+            runner.audit_http_denial(HttpRejection::MissingBearer, None),
+            Ok(())
+        );
+        let verified = caller("operator-a");
+        assert_eq!(
+            runner.audit_http_denial(HttpRejection::Protocol, Some(&verified)),
+            Ok(())
+        );
+        let events = audit.events.lock().unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].phase, AuditPhase::Denied);
+        assert_eq!(events[0].issuer, "<unverified>");
+        assert_eq!(events[0].subject, "<unverified>");
+        assert_eq!(events[0].reason, "http_missing_bearer");
+        assert_eq!(events[0].operation, "transport.mcp.http/v1");
+        assert_eq!(events[1].issuer, verified.issuer());
+        assert_eq!(events[1].subject, verified.subject());
+        assert_eq!(events[1].reason, "http_protocol_rejected");
+        assert_ne!(events[0].request_id, events[1].request_id);
+        drop(events);
+
+        let unavailable = ExecutionCoordinator::new(
+            fixture(),
+            Arc::new(BrokerSpy::new("unavailable")),
+            Arc::new(MemoryAudit::new(Some(AuditPhase::Denied))),
+        );
+        assert_eq!(
+            unavailable.audit_http_denial(HttpRejection::InvalidBearer, None),
+            Err(RuntimeFailure::AuditUnavailable)
+        );
     }
 
     struct BrokerSpy {

@@ -145,6 +145,21 @@ pub struct CompiledConfig {
     pub snapshot_digest: String,
 }
 
+fn valid_issuer(issuer: &str) -> bool {
+    if issuer == "local://trusted-launcher" {
+        return true;
+    }
+    reqwest::Url::parse(issuer).is_ok_and(|url| {
+        url.scheme() == "https"
+            && url.host_str().is_some()
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.fragment().is_none()
+            && url.query().is_none()
+            && url.as_str() == issuer
+    })
+}
+
 fn valid_name(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= 128
@@ -334,7 +349,7 @@ impl CompiledConfig {
                     );
                     for s in &spec.subjects {
                         ensure!(
-                            s.issuer == "local://trusted-launcher" && valid_name(&s.subject),
+                            valid_issuer(&s.issuer) && valid_name(&s.subject),
                             "unsupported subject identity"
                         );
                     }
@@ -467,6 +482,27 @@ impl CompiledConfig {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn grant_issuers_allow_only_trusted_local_or_canonical_https() {
+        for good in [
+            "local://trusted-launcher",
+            "https://issuer.example.invalid/",
+        ] {
+            assert!(super::valid_issuer(good), "{good}");
+        }
+        for bad in [
+            "http://issuer.example.invalid/",
+            "https://user@issuer.example.invalid/",
+            "https://issuer.example.invalid/#fragment",
+            "https://issuer.example.invalid/?token=x",
+            "https://issuer.example.invalid",
+            "local://untrusted",
+            "",
+        ] {
+            assert!(!super::valid_issuer(bad), "{bad}");
+        }
+    }
+
     use super::*;
 
     fn parse(yaml: &str) -> Vec<Resource> {

@@ -39,6 +39,20 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server
+      - name: Provision disposable SSH accounts with bounded retries
+        run: |
+          for user in hmobserver hmvault; do
+            for attempt in 1 2 3; do
+              if getent passwd "$user" >/dev/null; then break; fi
+              if sudo -n timeout -k 2s 12s useradd -m -s /bin/sh "$user"; then break; fi
+              if [ "$attempt" -eq 3 ]; then
+                echo "failed to provision disposable account: $user" >&2
+                exit 1
+              fi
+              sleep 2
+            done
+            printf '%s:%s\n' "$user" "$(openssl rand -hex 24)" | sudo -n chpasswd
+          done
       - name: Build and exercise MCP over stdio
         run: |
           cargo build --locked --bin hostmarshal
@@ -49,6 +63,45 @@ jobs:
           python3 tests/audit_smoke.py
           python3 tests/policy_explain_smoke.py
           python3 tests/transport_smoke.py
+          python3 tests/vault_ssh_smoke.py
+          python3 -m venv .remote-auth-venv
+          .remote-auth-venv/bin/pip install --disable-pip-version-check -q 'PyJWT==2.10.1' 'cryptography==46.0.3'
+          .remote-auth-venv/bin/python tests/remote_http_smoke.py
+          .remote-auth-venv/bin/python tests/remote_hardening_smoke.py
+
+  vault-real:
+    name: Real Vault TLS SSH signer interoperability
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce locked build
+        run: cargo build --locked --bin hostmarshal
+      - name: Install disposable OpenSSH test server
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server
+      - name: Provision isolated SSH account before Vault startup
+        run: |
+          # A transient passwd/NSS lock on hosted runners must not turn into
+          # an unbounded hang after the Vault test has already started.
+          # Only disposable CI account credentials; SSH password login is off.
+          for attempt in 1 2 3; do
+            if sudo -n timeout -k 2s 12s useradd -m -s /bin/sh hmvault; then
+              break
+            fi
+            if getent passwd hmvault >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "failed to provision disposable SSH account" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+          printf 'hmvault:%s\n' "$(openssl rand -hex 24)" | sudo -n chpasswd
+      - name: Run TLS real-Vault signing and revocation test
+        run: python3 tests/vault_real_smoke.py
 
   fuzz-smoke:
     name: Coverage-guided fuzz target smoke
@@ -62,3 +115,18 @@ jobs:
         run: cargo +nightly-2026-11-06 install cargo-fuzz --locked --version 0.13.2
       - name: Build and run bounded fuzz target
         run: cargo +nightly-2026-11-06 fuzz run yaml_manifest -- -runs=512 -timeout=5 -max_len=8192
+
+  ingress-oauth:
+    name: Traefik isolation and real Keycloak OAuth interoperability
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build locked HostMarshal binary
+        run: cargo build --locked --bin hostmarshal
+      - name: Install pinned disposable test helpers
+        run: |
+          python3 -m venv .oauth-ci-venv
+          .oauth-ci-venv/bin/pip install --disable-pip-version-check -q 'PyJWT==2.10.1' 'cryptography==46.0.3'
+      - name: Test real OAuth issuer and TLS-only Traefik isolation
+        run: .oauth-ci-venv/bin/python tests/ingress_oidc_ci.py
