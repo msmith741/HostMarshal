@@ -270,6 +270,40 @@ mod tests {
     }
 
     #[test]
+    fn full_queue_fails_closed_instead_of_dropping_or_acknowledging() {
+        let (started, entered) = mpsc::sync_channel(1);
+        let (release, unblock) = mpsc::channel();
+        let dispatcher = Arc::new(
+            BoundedAuditSink::new(
+                Arc::new(Blocked {
+                    started,
+                    release: Mutex::new(unblock),
+                }),
+                1,
+                Duration::from_secs(2),
+            )
+            .unwrap(),
+        );
+        let caller_dispatcher = Arc::clone(&dispatcher);
+        let caller = thread::spawn(move || caller_dispatcher.record(&sample()));
+        // The worker has accepted the first event and is stalled inside the
+        // sink; filling the one-slot queue is now deterministic.
+        entered.recv_timeout(Duration::from_secs(1)).unwrap();
+        let (committed, _receipt) = mpsc::sync_channel(1);
+        assert!(dispatcher
+            .sender
+            .try_send(Delivery {
+                event: sample(),
+                committed,
+            })
+            .is_ok());
+        assert!(dispatcher.record(&sample()).is_err());
+        assert!(!dispatcher.healthy.load(Ordering::SeqCst));
+        release.send(()).unwrap();
+        assert!(caller.join().unwrap().is_err());
+    }
+
+    #[test]
     fn oversize_event_fails_closed_without_writer_use() {
         let capture = Arc::new(Capture::default());
         let dispatcher =
