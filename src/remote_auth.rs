@@ -153,9 +153,18 @@ impl RemoteJwtVerifier {
         );
         let header = decode_header(token).context("invalid access token header")?;
         ensure!(header.alg == Algorithm::RS256, "unsupported JWT algorithm");
-        ensure!(header.typ.as_deref() == Some("at+jwt"), "expected an access token");
-        let kid = header.kid.as_deref().ok_or_else(|| anyhow::anyhow!("missing key ID"))?;
-        let key = self.keys.get(kid).ok_or_else(|| anyhow::anyhow!("untrusted key ID"))?;
+        ensure!(
+            header.typ.as_deref() == Some("at+jwt"),
+            "expected an access token"
+        );
+        let kid = header
+            .kid
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("missing key ID"))?;
+        let key = self
+            .keys
+            .get(kid)
+            .ok_or_else(|| anyhow::anyhow!("untrusted key ID"))?;
 
         let mut validation = Validation::new(Algorithm::RS256);
         validation.set_issuer(&[self.issuer.as_str()]);
