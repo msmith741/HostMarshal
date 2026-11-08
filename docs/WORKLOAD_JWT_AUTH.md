@@ -1,6 +1,6 @@
 # Externally issued workload JWT authentication for Vault SSH signer
 
-**Status:** Experimental M4 feature (FR-031), subject to real-Vault CI and independent review. This is an **optional**, issuer-neutral source for Vault signer credentials. It does not authenticate MCP clients or make HostMarshal a Kubernetes operator.
+**Status:** Experimental M4 feature (FR-031), real Vault JWT login and negative-path checks passed in disposable CI; independent production review remains required. This is an **optional**, issuer-neutral source for Vault signer credentials. It does not authenticate MCP clients or make HostMarshal a Kubernetes operator.
 
 ## Scope and architecture
 
