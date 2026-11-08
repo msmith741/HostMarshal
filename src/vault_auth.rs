@@ -283,14 +283,14 @@ fn recovery_epoch(path: &Path) -> Result<u64> {
     {
         use std::os::unix::fs::PermissionsExt;
         ensure!(
-            metadata.permissions().mode() & 0o222 == 0
-                && parent.permissions().mode() & 0o022 == 0,
+            metadata.permissions().mode() & 0o222 == 0 && parent.permissions().mode() & 0o022 == 0,
             "recovery epoch must be read-only with a protected parent"
         );
     }
     let content = fs::read_to_string(path).context("recovery epoch unreadable")?;
     let value = content.trim_end_matches(['\n', '\r']);
-    if value.is_empty() || value.len() > 20
+    if value.is_empty()
+        || value.len() > 20
         || (value.starts_with('0') && value != "0")
         || !value.bytes().all(|c| c.is_ascii_digit())
     {
@@ -351,8 +351,11 @@ impl LeaseLifecycle {
         State::Quarantined(observed_epoch(self.recovery_epoch_file.as_ref()))
     }
 
-    async fn acquire<F>(self: &Arc<Self>, client: &Client, login: F)
-        -> Result<HeaderValue, BrokerFailure>
+    async fn acquire<F>(
+        self: &Arc<Self>,
+        client: &Client,
+        login: F,
+    ) -> Result<HeaderValue, BrokerFailure>
     where
         F: std::future::Future<Output = Result<Active, BrokerFailure>>,
     {
@@ -374,8 +377,14 @@ impl LeaseLifecycle {
                     return Err(BrokerFailure::Denied);
                 }
                 if active.expires.saturating_duration_since(Instant::now()) <= self.renew_before {
-                    renew_active(client, &self.renew_url, &self.policy,
-                                 self.renew_before, active).await?
+                    renew_active(
+                        client,
+                        &self.renew_url,
+                        &self.policy,
+                        self.renew_before,
+                        active,
+                    )
+                    .await?
                 } else {
                     active
                 }
@@ -395,7 +404,9 @@ impl LeaseLifecycle {
         let weak: Weak<Self> = Arc::downgrade(self);
         *slot = Some(tokio::spawn(async move {
             loop {
-                let Some(owner) = weak.upgrade() else { return; };
+                let Some(owner) = weak.upgrade() else {
+                    return;
+                };
                 let next = {
                     let state = owner.state.lock().await;
                     match &*state {
@@ -406,14 +417,23 @@ impl LeaseLifecycle {
                 drop(owner);
                 sleep_until(next.into()).await;
 
-                let Some(owner) = weak.upgrade() else { return; };
+                let Some(owner) = weak.upgrade() else {
+                    return;
+                };
                 let mut state = owner.state.lock().await;
                 let old = std::mem::replace(&mut *state, owner.quarantined());
                 let active = match old {
                     State::Active(active) if active.expires <= Instant::now() => return,
                     State::Active(active) if active.maintain_at <= Instant::now() => {
-                        match renew_active(&client, &owner.renew_url, &owner.policy,
-                                           owner.renew_before, active).await {
+                        match renew_active(
+                            &client,
+                            &owner.renew_url,
+                            &owner.policy,
+                            owner.renew_before,
+                            active,
+                        )
+                        .await
+                        {
                             Ok(renewed) => renewed,
                             Err(_) => return, // sticky quarantine, no retry
                         }
@@ -438,7 +458,10 @@ impl AppRole {
         let secret_id = secret(&self.secret_id)?;
         let response = client
             .post(self.login_url.clone())
-            .json(&Login { role_id: &role_id, secret_id: &secret_id })
+            .json(&Login {
+                role_id: &role_id,
+                secret_id: &secret_id,
+            })
             .send()
             .await
             .map_err(|_| BrokerFailure::Unavailable)?;
@@ -452,7 +475,10 @@ impl JwtWorkload {
         let jwt = workload_jwt(&self.jwt_file)?;
         let response = client
             .post(self.login_url.clone())
-            .json(&JwtLogin { role: &self.role, jwt: &jwt })
+            .json(&JwtLogin {
+                role: &self.role,
+                jwt: &jwt,
+            })
             .send()
             .await
             .map_err(|_| BrokerFailure::Unavailable)?;
@@ -601,8 +627,12 @@ mod tests {
     #[test]
     fn proactive_schedule_has_minimum_ttl_fraction() {
         let lease = Lease {
-            client_token: "opaque".into(), renewable: true, lease_duration: 30,
-            policies: vec![], token_policies: vec![], identity_policies: vec![],
+            client_token: "opaque".into(),
+            renewable: true,
+            lease_duration: 30,
+            policies: vec![],
+            token_policies: vec![],
+            identity_policies: vec![],
         };
         let active = Active::from_lease(&lease, Duration::from_secs(300));
         let delay = active.maintain_at.saturating_duration_since(Instant::now());
