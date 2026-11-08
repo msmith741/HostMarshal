@@ -328,9 +328,8 @@ mod tests {
             r#"{"apiVersion":"hostmarshal.io/audit-delivery/v1alpha1","queueCapacity":8,"ackTimeoutMs":0}"#,
             r#"{"apiVersion":"hostmarshal.io/audit-delivery/v1alpha1","queueCapacity":8,"ackTimeoutMs":1000,"unsafeFallback":true}"#,
         ] {
-            match serde_json::from_str::<AuditDeliverySpec>(invalid) {
-                Ok(config) => assert!(config.validate().is_err()),
-                Err(_) => {}
+            if let Ok(config) = serde_json::from_str::<AuditDeliverySpec>(invalid) {
+                assert!(config.validate().is_err());
             }
         }
     }
