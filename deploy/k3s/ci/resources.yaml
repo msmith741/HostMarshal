@@ -47,7 +47,7 @@ spec:
             - sh
             - -ec
             - |
-              install -d -m 0700 /runtime
+              chmod 0700 /runtime
               cp /identity/auth.json /runtime/auth.json
               cp /identity/ingress.proof /runtime/ingress.proof
               cp /trust/keys.json /runtime/keys.json

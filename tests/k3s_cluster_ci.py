@@ -191,12 +191,12 @@ def install(root, tls_cert, tls_key, auth, proof, jwks):
     kube("create", "configmap", "hostmarshal-ci-config", "-n", NS,
          "--from-file=" + str(fixture_config))
     kube("create", "configmap", "hostmarshal-ci-nginx", "-n", NS,
-         "--from-file=default.conf:" + str(nginx_template))
+         "--from-file=default.conf=" + str(nginx_template))
     kube("create", "configmap", "hostmarshal-ci-jwks", "-n", NS,
-         "--from-file=keys.json:" + str(jwks))
+         "--from-file=keys.json=" + str(jwks))
     kube("create", "secret", "generic", "hostmarshal-ci-identity", "-n", NS,
-         "--from-file=auth.json:" + str(auth),
-         "--from-file=ingress.proof:" + str(proof))
+         "--from-file=auth.json=" + str(auth),
+         "--from-file=ingress.proof=" + str(proof))
     kube("create", "secret", "tls", "hostmarshal-ci-tls", "-n", NS,
          "--cert=" + str(tls_cert), "--key=" + str(tls_key))
     kube("apply", "-f", "deploy/k3s/ci/resources.yaml")
@@ -230,7 +230,7 @@ def attacker_pod(name, namespace, label):
 def probe(ns, pod, address):
     result = kube(
         "exec", "-n", ns, pod, "--",
-        "curl", "--noproxy", "*",
+        "curl", "--noproxy", "*", "-k",
         "--connect-timeout", "2", "--max-time", "5",
         "-s", "-o", "/dev/null",
         "-w", "%{http_code}",
