@@ -5,8 +5,8 @@
 ## Security boundaries
 
 1. Only the `http --listen 127.0.0.1:<port>` command enables this transport. Binding `0.0.0.0` or a public/private non-loopback address is refused.
-2. Exposing the listener to remote clients **requires a separately configured TLS reverse proxy**, with network access to the loopback backend limited to that proxy. The proxy must preserve the authorized public `Host` header and must not strip the Authorization bearer header. The MCP service ignores `X-Forwarded-User` and similar identity claims.
-3. Each HTTP POST must carry exactly one `Authorization: Bearer <access-token>` header. The token signature is verified with an **administrator-pinned offline JWKS file**, not a key discovered from untrusted token contents. Only RSA/RS256 keys with a unique trusted `kid`, `kty=RSA`, `use=sig` and `alg=RS256` are admitted.
+2. Exposing the listener to remote clients **requires a separately configured TLS reverse proxy**, with network access to the loopback backend limited to that proxy. The proxy must enforce the public Host before forwarding, set the backend Host to the exact configured `allowedHost`, and must not strip the Authorization bearer header. In trusted-proxy mode it must independently set the public `X-Forwarded-Host` and the protected proof. The MCP service ignores `X-Forwarded-User` and similar identity claims.
+3. Each HTTP POST must carry exactly one `Authorization: Bearer <access-token>` header. The token signature is verified with either an **administrator-pinned offline JWKS file** or an explicit **pinned-HTTPS online JWKS endpoint**, never a key URL derived from untrusted token contents. Only RSA/RS256 keys with a unique trusted `kid`, `kty=RSA`, `use=sig` and `alg=RS256` are admitted.
 4. The token header must identify an **access token** (`typ=at+jwt`). Validation requires exact `iss` and `aud`, nonempty `sub`, `exp`, `nbf`, `iat`, `hostmarshal.observe` scope, at most 30 seconds clock skew and one-hour issuance lifetime.
 5. The verified issuer and subject form the `AuthenticatedCaller` used for **both discovery and execution**. A JWT with a valid signature but no matching HostMarshal Grant sees no authorized capabilities. Stdio `--principal` never establishes a remote caller's identity.
 6. HTTP uses stateless MCP mode and no server-side session principal cache. `Origin` requests are denied; there is no permissive CORS. Incorrect `Host` is denied. The server limits request bodies to 256 KiB, uses runtime concurrency limits and requires POST; GET/DELETE return 405.
@@ -57,7 +57,7 @@ hostmarshal http --listen 127.0.0.1:8338 \
   --audit-log /var/lib/hostmarshal/audit/events.jsonl
 ```
 
-The protected proxy must expose `https://mcp.example.invalid/mcp` and forward that same public Host header; if the proxy rewrites Host, configure `allowedHost` for the exact value the backend actually sees and enforce the expected external authority at the proxy. The proxy must not permit bypass and must not accept unauthenticated access. The JWT's audience remains the **external resource identifier**, never the loopback backend URL.
+The protected proxy must expose `https://mcp.example.invalid/mcp` and validate its public Host. It may set the backend Host to `allowedHost` (which must match exactly) and, in trusted-proxy mode, must set `X-Forwarded-Host` to the exact public authority from the configured audience, while stripping any client-supplied forwarded/proof headers. The proxy must not permit bypass and must not accept unauthenticated access. The JWT's audience remains the **external resource identifier**, never the loopback backend URL.
 
 The 2026-07-28 Streamable HTTP wire format additionally requires `MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` for named tool calls; values must match JSON-RPC body fields. Clients must supply per-request `_meta` containing the protocol version and capabilities. The SDK rejects missing or mismatched routing headers before tool invocation.
 

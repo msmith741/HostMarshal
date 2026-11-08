@@ -110,11 +110,9 @@ async fn require_bearer(
 ) -> Response {
     // HTTP is intentionally loopback-only; TLS must be enforced by a locally
     // controlled reverse proxy. Never accept X-Forwarded-* as identity.
-    let host = request
-        .headers()
-        .get(header::HOST)
-        .and_then(|v| v.to_str().ok());
-    if host != Some(state.verifier.allowed_host()) {
+    let mut host_values = request.headers().get_all(header::HOST).iter();
+    let host = host_values.next().and_then(|v| v.to_str().ok());
+    if host_values.next().is_some() || host != Some(state.verifier.allowed_host()) {
         return reject(
             &state,
             HttpRejection::Host,

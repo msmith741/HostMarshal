@@ -215,6 +215,12 @@ def main():
                 "X-HostMarshal-Ingress-Proof": "invalid-proof",
             })
             assert forged_status == 403, forged_status
+            wrong_scheme, _ = rpc(port, valid_a, "tools/list", extra_headers={
+                "X-Forwarded-Proto": "http",
+                "X-Forwarded-Host": "mcp.example.invalid",
+                "X-HostMarshal-Ingress-Proof": proof,
+            })
+            assert wrong_scheme == 403, wrong_scheme
 
             status, hdr, payload = request_tls(
                 ingress_port, ingress_ca, "GET",
@@ -237,6 +243,45 @@ def main():
 
             status, _, payload = request_tls(ingress_port, ingress_ca, "POST", "/mcp", valid_a)
             assert status == 200 and "inventory.inspect" in payload.decode(), (status, payload)
+            # Client-provided proxy claims must be removed by the ingress
+            # fixture and replaced by the trusted proxy's own values.
+            status, _, payload = request_tls(
+                ingress_port, ingress_ca, "POST", "/mcp", valid_a,
+                extra={
+                    "X-Forwarded-Proto": "http",
+                    "X-Forwarded-Host": "spoofed.example.invalid",
+                    "X-HostMarshal-Ingress-Proof": "forged-from-client",
+                },
+            )
+            assert status == 200 and "inventory.inspect" in payload.decode()
+
+            # Wrong CA cannot establish the identity of the online JWKS
+            # issuer even when the token is otherwise correctly signed.
+            wrong_port = port_available()
+            wrong = json.loads(auth.read_text())
+            wrong["allowedHost"] = f"127.0.0.1:{wrong_port}"
+            wrong["jwksCaCertificateFile"] = str(ingress_ca)
+            wrong.pop("ingress")
+            wrong_file = root / "wrong-issuer-ca.json"
+            wrong_file.write_text(json.dumps(wrong))
+            wrong_file.chmod(0o600)
+            wrong_process = subprocess.Popen([
+                str(BIN), "http", "--listen", f"127.0.0.1:{wrong_port}",
+                "--config-dir", str(config), "--auth-config", str(wrong_file),
+                "--audit-log", str(root / "wrong-ca-audit.jsonl"),
+            ], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True)
+            try:
+                wait_ready(wrong_process, wrong_port)
+                rejected, _ = rpc(wrong_port, valid_a, "tools/list")
+                assert rejected == 401, ("unexpected JWKS trust through wrong CA", rejected)
+            finally:
+                wrong_process.terminate()
+                try:
+                    wrong_process.wait(timeout=6)
+                except subprocess.TimeoutExpired:
+                    wrong_process.kill()
+                    wrong_process.wait(timeout=6)
             # Tests TLS validation; an untrusted public root must not silently
             # validate this disposable ingress certificate.
             try:
@@ -266,10 +311,8 @@ def main():
             signer["redirect"] = False
             signer["jwks"] = {"keys": [jwk_b]}
             assert request_tls(ingress_port, ingress_ca, "POST", "/mcp", valid_b)[0] == 200
-            signer["status"] = 503
-            # No immediate stale use after the next refresh deadline.
-            # Avoid a third 30-second sleep: replace the running issuer
-            # trust endpoint with a wrong CA on a separate startup fixture.
+            # A separate wrong-CA fixture above verifies the cryptographic
+            # trust boundary without waiting another refresh interval.
             log = audit.read_text()
             assert proof not in log and valid_a not in log and valid_b not in log
             assert "http_ingress_rejected" in log
