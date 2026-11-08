@@ -294,8 +294,8 @@ fn recovery_epoch(path: &Path) -> Result<u64> {
         );
         let mut directory = path.parent().context("invalid recovery marker parent")?;
         loop {
-            let stat = fs::symlink_metadata(directory)
-                .context("cannot inspect recovery path ancestor")?;
+            let stat =
+                fs::symlink_metadata(directory).context("cannot inspect recovery path ancestor")?;
             ensure!(
                 stat.file_type().is_dir()
                     && stat.uid() == 0
@@ -305,7 +305,9 @@ fn recovery_epoch(path: &Path) -> Result<u64> {
             if directory == Path::new("/") {
                 break;
             }
-            directory = directory.parent().context("missing recovery path ancestor")?;
+            directory = directory
+                .parent()
+                .context("missing recovery path ancestor")?;
         }
     }
     #[cfg(not(unix))]
