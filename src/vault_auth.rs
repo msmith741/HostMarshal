@@ -744,7 +744,14 @@ mod tests {
         *lifecycle.state.lock().await = State::Quarantined(Some(100));
         tokio::time::timeout(Duration::from_secs(2), async {
             loop {
-                if lifecycle.worker.lock().unwrap().as_ref().unwrap().is_finished() {
+                if lifecycle
+                    .worker
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .unwrap()
+                    .is_finished()
+                {
                     break;
                 }
                 tokio::time::sleep(Duration::from_millis(5)).await;
