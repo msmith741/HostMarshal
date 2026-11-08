@@ -410,7 +410,7 @@ impl OnlineKeys {
             state.valid_until = None;
             let response = self.client.get(self.url.clone()).send().await?;
             ensure!(
-                response.status().is_success() && response.url() == self.url,
+                response.status().is_success() && response.url() == &self.url,
                 "untrusted JWKS response or redirect"
             );
             let mut response = response;
