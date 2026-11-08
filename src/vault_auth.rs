@@ -49,7 +49,7 @@ pub(crate) struct AppRole {
 }
 pub(crate) enum VaultAuth {
     File(PathBuf),
-    AppRole(AppRole),
+    AppRole(Box<AppRole>),
 }
 
 #[derive(Deserialize)]
@@ -225,7 +225,7 @@ impl VaultAuth {
         );
         check_private_key_file(&cfg.role_id_file).context("AppRole RoleID not protected")?;
         check_private_key_file(&cfg.secret_id_file).context("AppRole SecretID not protected")?;
-        Ok(Self::AppRole(AppRole {
+        Ok(Self::AppRole(Box::new(AppRole {
             login_url: origin.join(&format!("v1/auth/{}/login", cfg.auth_mount))?,
             renew_url: origin.join("v1/auth/token/renew-self")?,
             role_id: cfg.role_id_file,
@@ -233,7 +233,7 @@ impl VaultAuth {
             policy: cfg.expected_policy,
             renew_before: Duration::from_secs(cfg.renew_before_seconds),
             state: Mutex::new(State::Cold),
-        }))
+        })))
     }
     pub(crate) async fn token(&self, client: &Client) -> Result<HeaderValue, BrokerFailure> {
         match self {
