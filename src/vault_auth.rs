@@ -86,10 +86,10 @@ struct LeaseLifecycle {
 }
 impl Drop for LeaseLifecycle {
     fn drop(&mut self) {
-        if let Ok(mut handle) = self.worker.lock() {
-            if let Some(task) = handle.take() {
-                task.abort();
-            }
+        if let Ok(mut handle) = self.worker.lock()
+            && let Some(task) = handle.take()
+        {
+            task.abort();
         }
     }
 }
