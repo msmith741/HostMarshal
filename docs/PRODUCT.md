@@ -53,6 +53,7 @@ HostMarshal provides **typed, authorized, auditable infrastructure operations** 
 | FR-033 | Permit opt-in recovery from quarantined Vault AppRole/JWT signing lease only after a strictly increased administrator-controlled recovery epoch and fresh authenticated Vault login, preventing stale-token reuse, epoch rollback, or automatic recovery; otherwise require restart | M4 |
 | FR-034 | Audit every AppRole/JWT Vault token renewal and operator-gated recovery attempt with correlated, fixed, redacted precommit and terminal records through the launch-owned audit sink; reject credential use or recovery if a required audit commitment fails | M4 |
 | FR-035 | Optionally deliver all audit events through a launcher-configured, provider-neutral, finite-capacity dispatcher that requires underlying sink acknowledgment, bounds each caller wait/event size, and latches fail-closed on overload, writer errors or timeout without fallback | M4 |
+| FR-036 | Use a self-tested conservative change-impact CI policy to run narrow integration suites only for relevant paths, fall back to full tests on ambiguity or shared security changes, and require scheduled/manual full release gates | M4 |
 
 ## Non-functional requirements
 
