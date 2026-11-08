@@ -22,7 +22,7 @@ jobs:
     outputs:
       k3s: ${{ steps.paths.outputs.k3s }}
     steps:
-      - uses: actions/checkout@4d3297da4576ff6b0df4cea46d846e0ecbe1d0db  # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
