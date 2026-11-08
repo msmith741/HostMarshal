@@ -14,9 +14,9 @@ use rmcp::{
     ErrorData as McpError, ServerHandler,
     model::{
         CallToolRequestParams, CallToolResponse, ListToolsResult, PaginatedRequestParams,
-        RoleServer, ServerCapabilities, ServerConfig, Tool,
+        ServerCapabilities, ServerConfig, Tool,
     },
-    service::RequestContext,
+    service::{RequestContext, RoleServer},
     transport::streamable_http_server::{
         StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
     },
