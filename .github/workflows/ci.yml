@@ -66,6 +66,25 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server
+      - name: Provision isolated SSH account before Vault startup
+        run: |
+          # A transient passwd/NSS lock on hosted runners must not turn into
+          # an unbounded hang after the Vault test has already started.
+          # Only disposable CI account credentials; SSH password login is off.
+          for attempt in 1 2 3; do
+            if sudo -n timeout -k 2s 12s useradd -m -s /bin/sh hmvault; then
+              break
+            fi
+            if getent passwd hmvault >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "failed to provision disposable SSH account" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+          printf 'hmvault:%s\n' "$(openssl rand -hex 24)" | sudo -n chpasswd
       - name: Run TLS real-Vault signing and revocation test
         run: python3 tests/vault_real_smoke.py
 

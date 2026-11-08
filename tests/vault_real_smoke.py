@@ -166,7 +166,7 @@ def main():
                 flush=True,
             )
 
-            sshd, ssh_port, known_hosts = start_certificate_sshd(root)
+            sshd, ssh_port, known_hosts = start_certificate_sshd(root, create_user=False)
             config = root / "config"
             config.mkdir()
             write_inventory(config, ssh_port, known_hosts)

@@ -133,12 +133,21 @@ def start_vault_signer(root):
     return server, cert_ca
 
 
-def start_certificate_sshd(root):
+def start_certificate_sshd(root, *, create_user=True):
     command("ssh-keygen", "-q", "-t", "ed25519", "-N", "",
             "-f", str(root / "host_key"))
-    command("sudo", "useradd", "-m", "-s", "/bin/sh", USER)
-    # Password login is disabled; random test password only unlocks account.
-    command("sudo", "chpasswd", input_text=f"{USER}:{os.urandom(24).hex()}\n")
+    if create_user:
+        command("sudo", "-n", "useradd", "-m", "-s", "/bin/sh", USER)
+        # Password login is disabled; random test password only unlocks account.
+        command("sudo", "-n", "chpasswd",
+                input_text=f"{USER}:{os.urandom(24).hex()}\n")
+    else:
+        # The independent real-Vault job provisions its isolated test account
+        # in a separate bounded setup step, before any Vault API requests.
+        existing = subprocess.run(
+            ["id", "-u", USER], capture_output=True, timeout=5
+        )
+        assert existing.returncode == 0, "test SSH account not provisioned"
     command("sudo", "install", "-d", "-m", "0755", "/run/sshd")
     port = free_port()
     pub = (root / "host_key.pub").read_text().split()
