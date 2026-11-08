@@ -257,6 +257,7 @@ async fn serve_remote_http(
         "HTTP MCP must listen on loopback"
     );
     let verifier = Arc::new(RemoteJwtVerifier::load(Path::new(auth_file))?);
+    verifier.validate_authorization_server().await?;
     let config = CompiledConfig::load(Path::new(directory))?;
     let broker = choose_broker(&config, ssh_map, vault_ssh)?;
     let store = Arc::new(ConfigStore::new(config));

@@ -35,6 +35,7 @@ struct AuthConfigFile {
     jwks_ca_certificate_file: Option<String>,
     jwks_refresh_seconds: Option<u64>,
     ingress: Option<IngressConfig>,
+    authorization_server_metadata_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -86,7 +87,8 @@ struct AccessClaims {
     iss: String,
     sub: String,
     exp: u64,
-    nbf: u64,
+    #[serde(default)]
+    nbf: Option<u64>,
     iat: u64,
     scope: String,
 }
@@ -99,6 +101,7 @@ pub struct RemoteJwtVerifier {
     online: Option<OnlineKeys>,
     ingress: Option<IngressProof>,
     metadata_url: String,
+    as_metadata_url: Option<Url>,
 }
 
 impl RemoteJwtVerifier {
@@ -135,6 +138,28 @@ impl RemoteJwtVerifier {
                         || matches!(b, b'.' | b'-' | b':' | b'[' | b']')),
             "invalid allowedHost"
         );
+        let as_metadata_url = match config.authorization_server_metadata_url {
+            Some(address) => {
+                ensure!(config.jwks_url.is_some(),
+                    "authorization-server metadata requires online JWKS");
+                let endpoint = Url::parse(&address).context("invalid auth-server metadata URL")?;
+                let configured_issuer = Url::parse(&config.issuer)?;
+                let configured_keys = Url::parse(config.jwks_url.as_deref().unwrap_or_default())?;
+                ensure!(
+                    endpoint.scheme() == "https"
+                        && endpoint.origin() == configured_issuer.origin()
+                        && endpoint.origin() == configured_keys.origin()
+                        && endpoint.username().is_empty()
+                        && endpoint.password().is_none()
+                        && endpoint.query().is_none()
+                        && endpoint.fragment().is_none()
+                        && endpoint.path().ends_with("/.well-known/openid-configuration"),
+                    "auth-server metadata must be pinned to the HTTPS issuer/JWKS origin"
+                );
+                Some(endpoint)
+            }
+            None => None,
+        };
         let (keys, online) = match (config.jwks_file, config.jwks_url) {
             (Some(path), None) => {
                 ensure!(
@@ -247,7 +272,53 @@ impl RemoteJwtVerifier {
             online,
             ingress,
             metadata_url,
+            as_metadata_url,
         })
+    }
+
+    /// Verify OIDC discovery independently over the same pinned TLS channel
+    /// used to retrieve JWKS. Discovery cannot change signing keys or audience.
+    /// A mismatch denies server startup, rather than accepting token hints.
+    pub async fn validate_authorization_server(&self) -> Result<()> {
+        let Some(endpoint) = &self.as_metadata_url else { return Ok(()); };
+        let online = self.online.as_ref().context("OIDC metadata requires online keys")?;
+        let response = online.client.get(endpoint.clone()).send().await?;
+        ensure!(response.status().is_success() && response.url() == endpoint,
+            "OIDC discovery failed or redirected");
+        let mut response = response;
+        let mut raw = Vec::new();
+        while let Some(chunk) = response.chunk().await? {
+            ensure!(raw.len().saturating_add(chunk.len()) <= 32 * 1024,
+                "OIDC metadata exceeds size limit");
+            raw.extend_from_slice(&chunk);
+        }
+        #[derive(Deserialize)]
+        struct Discovery {
+            issuer: String,
+            jwks_uri: String,
+            token_endpoint: String,
+            authorization_endpoint: String,
+            #[serde(default)]
+            grant_types_supported: Vec<String>,
+        }
+        let discovered: Discovery = serde_json::from_slice(&raw)
+            .context("invalid OIDC discovery document")?;
+        ensure!(discovered.issuer == self.issuer,
+            "OIDC discovery issuer mismatch");
+        ensure!(discovered.jwks_uri == online.url.as_str(),
+            "OIDC discovery JWKS is not the administrator-pinned URL");
+        for endpoint in [&discovered.token_endpoint, &discovered.authorization_endpoint] {
+            let parsed = Url::parse(endpoint)?;
+            ensure!(parsed.scheme() == "https"
+                && parsed.origin() == online.url.origin()
+                && parsed.username().is_empty()
+                && parsed.password().is_none()
+                && parsed.fragment().is_none(),
+                "untrusted OIDC endpoint origin");
+        }
+        ensure!(discovered.grant_types_supported.iter().any(|g| g == "client_credentials"),
+            "OIDC issuer does not advertise the required client_credentials grant");
+        Ok(())
     }
 
     pub fn allowed_host(&self) -> &str {
@@ -328,7 +399,7 @@ impl RemoteJwtVerifier {
         let mut validation = Validation::new(Algorithm::RS256);
         validation.set_issuer(&[self.issuer.as_str()]);
         validation.set_audience(&[self.audience.as_str()]);
-        validation.set_required_spec_claims(&["exp", "nbf", "aud", "iss", "sub"]);
+        validation.set_required_spec_claims(&["exp", "aud", "iss", "sub"]);
         validation.validate_exp = true;
         validation.validate_nbf = true;
         validation.leeway = CLOCK_SKEW_SECONDS;
@@ -348,7 +419,7 @@ impl RemoteJwtVerifier {
         );
         ensure!(
             claims.iat <= now.saturating_add(CLOCK_SKEW_SECONDS)
-                && claims.nbf <= claims.exp
+                && claims.nbf.is_none_or(|nbf| nbf <= claims.exp)
                 && claims.iat <= claims.exp
                 && claims.exp.saturating_sub(claims.iat) <= MAX_TOKEN_LIFETIME_SECONDS,
             "invalid access token lifetime"
@@ -448,6 +519,7 @@ mod tests {
             ingress: None,
             metadata_url: "https://mcp.example.invalid/.well-known/oauth-protected-resource/mcp"
                 .to_owned(),
+            as_metadata_url: None,
         };
         for header in ["", "Basic anything", "Bearer ", "Bearer a/b", "bearer abc"] {
             assert!(verifier.authenticate_header(header).await.is_err());
