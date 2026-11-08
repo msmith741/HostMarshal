@@ -81,7 +81,7 @@ struct Login<'a> {
 
 fn secret(path: &PathBuf) -> Result<Zeroizing<String>, BrokerFailure> {
     check_private_key_file(path).map_err(|_| BrokerFailure::Unavailable)?;
-    let raw = fs::read_to_string(path).map_err(|_| BrokerFailure::Unavailable)?;
+    let raw = Zeroizing::new(fs::read_to_string(path).map_err(|_| BrokerFailure::Unavailable)?);
     let value = raw.trim_end_matches(['\r', '\n']);
     if value.is_empty() || value.len() > 4096 || !value.bytes().all(|b| b.is_ascii_graphic()) {
         return Err(BrokerFailure::Denied);
@@ -101,7 +101,8 @@ async fn read(response: reqwest::Response, policy: &str) -> Result<Lease, Broker
         return Err(BrokerFailure::Denied);
     }
     let mut response = response;
-    let mut bytes = Vec::new();
+    // Avoid retaining bearer-token JSON in freed heap memory after parsing.
+    let mut bytes = Zeroizing::new(Vec::new());
     while let Some(chunk) = response
         .chunk()
         .await
