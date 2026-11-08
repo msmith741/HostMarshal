@@ -892,7 +892,10 @@ mod tests {
             identity_policies: vec![],
         };
         let result = lifecycle
-            .audited_renew(&Client::new(), Active::from_lease(&lease, Duration::from_secs(15)))
+            .audited_renew(
+                &Client::new(),
+                Active::from_lease(&lease, Duration::from_secs(15)),
+            )
             .await;
         assert!(matches!(result, Err(BrokerFailure::Unavailable)));
     }
