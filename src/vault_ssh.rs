@@ -20,6 +20,7 @@ use ssh_key::{Algorithm, Certificate, HashAlg, PublicKey, certificate::CertType}
 use tokio::process::Command;
 
 use crate::{
+    audit::AuditSink,
     credentials::{
         BrokerFailure, CredentialBroker, CredentialLease, CredentialScope, check_private_key_file,
     },
@@ -91,7 +92,11 @@ fn safe_segment(value: &str) -> bool {
 }
 
 impl VaultSshCertificateBroker {
-    pub fn load(path: &Path, config: &CompiledConfig) -> Result<Self> {
+    pub fn load(
+        path: &Path,
+        config: &CompiledConfig,
+        audit: std::sync::Arc<dyn AuditSink>,
+    ) -> Result<Self> {
         check_private_key_file(path).context("Vault signer config must be protected")?;
         let content = fs::read(path)?;
         ensure!(
@@ -129,7 +134,7 @@ impl VaultSshCertificateBroker {
         );
         let signing_url = url.join(&format!("v1/{}/sign/{}", spec.mount, spec.role))?;
 
-        let auth = VaultAuth::load(&url, spec.token_file, spec.app_role, spec.jwt_auth)?;
+        let auth = VaultAuth::load(&url, spec.token_file, spec.app_role, spec.jwt_auth, audit)?;
         ensure!(
             spec.ca_certificate_file.is_absolute(),
             "Vault TLS CA path must be absolute"

@@ -186,12 +186,12 @@ async fn serve_declarative(
     // No MCP message can choose or modify either value.
     let caller = AuthenticatedCaller::from_trusted_launcher(principal)?;
     let config = CompiledConfig::load(Path::new(directory))?;
-    let broker = choose_broker(&config, ssh_map, vault_ssh)?;
-    let store = Arc::new(ConfigStore::new(config));
     let audit: Arc<dyn AuditSink> = match audit_path {
         Some(path) => Arc::new(JsonlFileAudit::open(Path::new(path))?),
         None => Arc::new(StderrAudit),
     };
+    let broker = choose_broker(&config, ssh_map, vault_ssh, Arc::clone(&audit))?;
+    let store = Arc::new(ConfigStore::new(config));
     let runtime = Arc::new(ExecutionCoordinator::new(Arc::clone(&store), broker, audit));
     #[cfg(unix)]
     register_reload_signals(Arc::clone(&store), PathBuf::from(directory))?;
@@ -259,12 +259,12 @@ async fn serve_remote_http(
     let verifier = Arc::new(RemoteJwtVerifier::load(Path::new(auth_file))?);
     verifier.validate_authorization_server().await?;
     let config = CompiledConfig::load(Path::new(directory))?;
-    let broker = choose_broker(&config, ssh_map, vault_ssh)?;
-    let store = Arc::new(ConfigStore::new(config));
     let audit: Arc<dyn AuditSink> = match audit_path {
         Some(path) => Arc::new(JsonlFileAudit::open(Path::new(path))?),
         None => Arc::new(StderrAudit),
     };
+    let broker = choose_broker(&config, ssh_map, vault_ssh, Arc::clone(&audit))?;
+    let store = Arc::new(ConfigStore::new(config));
     let runtime = Arc::new(ExecutionCoordinator::new(Arc::clone(&store), broker, audit));
     #[cfg(unix)]
     register_reload_signals(store, PathBuf::from(directory))?;
@@ -275,6 +275,7 @@ fn choose_broker(
     config: &CompiledConfig,
     ssh_map: Option<&str>,
     vault_ssh: Option<&str>,
+    audit: Arc<dyn AuditSink>,
 ) -> Result<Arc<dyn CredentialBroker>> {
     anyhow::ensure!(
         ssh_map.is_none() || vault_ssh.is_none(),
@@ -285,6 +286,7 @@ fn choose_broker(
         (None, Some(path)) => Ok(Arc::new(VaultSshCertificateBroker::load(
             Path::new(path),
             config,
+            audit,
         )?)),
         (None, None) => Ok(Arc::new(DenyCredentialBroker)),
         (Some(_), Some(_)) => unreachable!("conflicting sources rejected"),

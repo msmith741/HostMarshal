@@ -2,15 +2,21 @@
 //! the restricted M4 Vault SSH signer. Vault validates JWT signatures,
 //! issuer/audience and bound role; HostMarshal validates the leased token.
 //! Never infer a Vault endpoint, JWT source or role from an MCP request.
-use crate::credentials::{BrokerFailure, check_private_key_file};
+use crate::{
+    audit::{AuditContext, AuditEvent, AuditPhase, AuditSink},
+    credentials::{BrokerFailure, check_private_key_file},
+};
 use anyhow::{Context, Result, ensure};
 use reqwest::{Client, Url, header::HeaderValue};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex as StdMutex, Weak},
-    time::{Duration, Instant},
+    sync::{
+        Arc, Mutex as StdMutex, Weak,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tokio::{sync::Mutex, task::JoinHandle, time::sleep_until};
 use zeroize::{Zeroize, Zeroizing};
@@ -82,6 +88,10 @@ struct LeaseLifecycle {
     renew_url: Url,
     renew_before: Duration,
     recovery_epoch_file: Option<PathBuf>,
+    // Same launch-owned sink as invocation audit. No separate untrusted
+    // destination or runtime-configured audit bypass.
+    audit: Arc<dyn AuditSink>,
+    audit_sequence: AtomicU64,
     worker: StdMutex<Option<JoinHandle<()>>>,
 }
 impl Drop for LeaseLifecycle {
@@ -362,6 +372,7 @@ impl LeaseLifecycle {
         policy: String,
         renew_before: Duration,
         recovery_epoch_file: Option<PathBuf>,
+        audit: Arc<dyn AuditSink>,
     ) -> Result<Arc<Self>> {
         if let Some(path) = &recovery_epoch_file {
             recovery_epoch(path).context("invalid administrator recovery epoch")?;
@@ -372,6 +383,8 @@ impl LeaseLifecycle {
             renew_url,
             renew_before,
             recovery_epoch_file,
+            audit,
+            audit_sequence: AtomicU64::new(0),
             worker: StdMutex::new(None),
         }))
     }
@@ -397,6 +410,68 @@ impl LeaseLifecycle {
             _ => None,
         };
         *state = self.quarantined_after_failure(baseline);
+    }
+
+    // All maintenance fields, reasons and operation names are constants.
+    // Never include token, policy, JWT, SecretID, Vault URL or a caller identity.
+    fn maintenance_id(&self) -> String {
+        let epoch = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let sequence = self.audit_sequence.fetch_add(1, Ordering::Relaxed);
+        format!("lease-{}-{epoch:x}-{sequence:016x}", std::process::id())
+    }
+
+    fn maintenance_event(
+        &self,
+        request_id: &str,
+        operation: &'static str,
+        phase: AuditPhase,
+        reason: &'static str,
+    ) -> Result<(), BrokerFailure> {
+        self.audit
+            .record(&AuditEvent::new(
+                AuditContext {
+                    request_id,
+                    issuer: "<system>",
+                    subject: "<system>",
+                    capability: "<credential-provider>",
+                    operation,
+                    target: "<provider>",
+                    snapshot_digest: "<maintenance>",
+                },
+                phase,
+                reason,
+            ))
+            .map_err(|_| BrokerFailure::Unavailable)
+    }
+
+    async fn audited_renew(
+        &self,
+        client: &Client,
+        active: Active,
+    ) -> Result<Active, BrokerFailure> {
+        let id = self.maintenance_id();
+        const OP: &str = "vault.signing-lease.renew/v1";
+        // Fail closed before contacting Vault if the audit precommit fails.
+        self.maintenance_event(&id, OP, AuditPhase::Authorized, "renew_started")?;
+        let result = renew_active(
+            client,
+            &self.renew_url,
+            &self.policy,
+            self.renew_before,
+            active,
+        )
+        .await;
+        let (phase, reason) = match &result {
+            Ok(_) => (AuditPhase::Succeeded, "renew_succeeded"),
+            Err(_) => (AuditPhase::Failed, "renew_failed"),
+        };
+        // If the terminal event cannot be committed, the refreshed token is
+        // never returned to either foreground callers or the worker.
+        self.maintenance_event(&id, OP, phase, reason)?;
+        result
     }
 
     async fn acquire<F>(
@@ -425,10 +500,27 @@ impl LeaseLifecycle {
                     *state = State::Quarantined(previous);
                     return Err(BrokerFailure::Denied);
                 }
-                // The marker authorizes exactly one login attempt. Capture
-                // its latest value after a failed attempt too, so an update
-                // made during the in-flight login cannot be replayed.
-                match login.await {
+                // The operator-gated fresh login must be separately committed
+                // before network use, and recorded after completion. An audit
+                // error consumes the observed epoch and leaves quarantine.
+                let id = self.maintenance_id();
+                const OP: &str = "vault.signing-lease.recovery/v1";
+                if let Err(error) =
+                    self.maintenance_event(&id, OP, AuditPhase::Authorized, "recovery_started")
+                {
+                    self.refresh_quarantine(&mut state);
+                    return Err(error);
+                }
+                let result = login.await;
+                let (phase, reason) = match &result {
+                    Ok(_) => (AuditPhase::Succeeded, "recovery_succeeded"),
+                    Err(_) => (AuditPhase::Failed, "recovery_failed"),
+                };
+                if let Err(error) = self.maintenance_event(&id, OP, phase, reason) {
+                    self.refresh_quarantine(&mut state);
+                    return Err(error);
+                }
+                match result {
                     Ok(active) => active,
                     Err(error) => {
                         self.refresh_quarantine(&mut state);
@@ -445,15 +537,7 @@ impl LeaseLifecycle {
                 // and background renewal. A threshold larger than the lease
                 // TTL must not cause a renewal on every authorized request.
                 if active.maintain_at <= Instant::now() {
-                    match renew_active(
-                        client,
-                        &self.renew_url,
-                        &self.policy,
-                        self.renew_before,
-                        active,
-                    )
-                    .await
-                    {
+                    match self.audited_renew(client, active).await {
                         Ok(renewed) => renewed,
                         Err(error) => {
                             self.refresh_quarantine(&mut state);
@@ -503,15 +587,7 @@ impl LeaseLifecycle {
                         return;
                     }
                     State::Active(active) if active.maintain_at <= Instant::now() => {
-                        match renew_active(
-                            &client,
-                            &owner.renew_url,
-                            &owner.policy,
-                            owner.renew_before,
-                            active,
-                        )
-                        .await
-                        {
+                        match owner.audited_renew(&client, active).await {
                             Ok(renewed) => renewed,
                             Err(_) => {
                                 owner.refresh_quarantine(&mut state);
@@ -584,6 +660,7 @@ impl VaultAuth {
         token_file: Option<PathBuf>,
         app_role: Option<AppRoleSpec>,
         jwt_auth: Option<JwtAuthSpec>,
+        audit: Arc<dyn AuditSink>,
     ) -> Result<Self> {
         ensure!(
             usize::from(token_file.is_some())
@@ -615,6 +692,7 @@ impl VaultAuth {
                     cfg.expected_policy,
                     Duration::from_secs(cfg.renew_before_seconds),
                     cfg.recovery_epoch_file,
+                    Arc::clone(&audit),
                 )?,
             })));
         }
@@ -642,6 +720,7 @@ impl VaultAuth {
                 cfg.expected_policy,
                 Duration::from_secs(cfg.renew_before_seconds),
                 cfg.recovery_epoch_file,
+                audit,
             )?,
         })))
     }
@@ -736,6 +815,8 @@ mod tests {
             renew_url: Url::parse("https://example.invalid/v1/auth/token/renew-self").unwrap(),
             renew_before: Duration::from_secs(15),
             recovery_epoch_file: None,
+            audit: Arc::new(crate::audit::StderrAudit),
+            audit_sequence: AtomicU64::new(0),
             worker: StdMutex::new(None),
         });
         lifecycle.start_worker(Client::new()).unwrap();
@@ -766,6 +847,144 @@ mod tests {
         let mut state = State::Quarantined(Some(101));
         lifecycle.refresh_quarantine(&mut state);
         assert!(matches!(state, State::Quarantined(Some(101))));
+    }
+
+    struct UnavailableAudit;
+    impl AuditSink for UnavailableAudit {
+        fn record(&self, _event: &AuditEvent) -> std::io::Result<()> {
+            Err(std::io::Error::other("injected audit failure"))
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingAudit {
+        events: StdMutex<Vec<AuditEvent>>,
+    }
+    impl AuditSink for RecordingAudit {
+        fn record(&self, event: &AuditEvent) -> std::io::Result<()> {
+            self.events.lock().unwrap().push(event.clone());
+            Ok(())
+        }
+    }
+
+    fn test_lifecycle(audit: Arc<dyn AuditSink>) -> Arc<LeaseLifecycle> {
+        Arc::new(LeaseLifecycle {
+            state: Arc::new(Mutex::new(State::Cold)),
+            policy: "sign-only".to_owned(),
+            renew_url: Url::parse("http://127.0.0.1:9/v1/auth/token/renew-self").unwrap(),
+            renew_before: Duration::from_secs(15),
+            recovery_epoch_file: None,
+            audit,
+            audit_sequence: AtomicU64::new(0),
+            worker: StdMutex::new(None),
+        })
+    }
+
+    #[tokio::test]
+    async fn renewal_audit_precommit_failure_prevents_network_and_denies_token() {
+        let lifecycle = test_lifecycle(Arc::new(UnavailableAudit));
+        let lease = Lease {
+            client_token: "SENSITIVE-SIGNER-TOKEN".to_owned(),
+            renewable: true,
+            lease_duration: 30,
+            policies: vec![],
+            token_policies: vec![],
+            identity_policies: vec![],
+        };
+        let result = lifecycle
+            .audited_renew(
+                &Client::new(),
+                Active::from_lease(&lease, Duration::from_secs(15)),
+            )
+            .await;
+        assert!(matches!(result, Err(BrokerFailure::Unavailable)));
+    }
+
+    struct FailTerminalAudit;
+    impl AuditSink for FailTerminalAudit {
+        fn record(&self, event: &AuditEvent) -> std::io::Result<()> {
+            if event.phase == AuditPhase::Succeeded {
+                Err(std::io::Error::other("injected terminal write failure"))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn successful_vault_renewal_with_failed_terminal_audit_quarantines() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // Disposable HTTP fixture tests only the state/audit path. Actual
+        // Vault client construction enforces pinned HTTPS in integration CI.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buf = [0_u8; 4096];
+            assert!(stream.read(&mut buf).await.unwrap() > 0);
+            let json = r#"{"auth":{"client_token":"opaque","renewable":true,"lease_duration":30,"policies":["sign-only"],"token_policies":["sign-only"],"identity_policies":[]}}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{json}",
+                json.len()
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        });
+        let now = Instant::now();
+        let lifecycle = Arc::new(LeaseLifecycle {
+            state: Arc::new(Mutex::new(State::Active(Active {
+                token: Zeroizing::new("opaque".to_owned()),
+                expires: now + Duration::from_secs(30),
+                maintain_at: now - Duration::from_secs(1),
+            }))),
+            policy: "sign-only".to_owned(),
+            renew_url: Url::parse(&format!("http://{addr}/v1/auth/token/renew-self")).unwrap(),
+            renew_before: Duration::from_secs(15),
+            recovery_epoch_file: None,
+            audit: Arc::new(FailTerminalAudit),
+            audit_sequence: AtomicU64::new(0),
+            worker: StdMutex::new(None),
+        });
+        let result = lifecycle
+            .acquire(&Client::new(), async { Err(BrokerFailure::Denied) })
+            .await;
+        assert!(matches!(result, Err(BrokerFailure::Unavailable)));
+        assert!(matches!(
+            *lifecycle.state.lock().await,
+            State::Quarantined(None)
+        ));
+        server.await.unwrap();
+    }
+
+    #[test]
+    fn maintenance_audit_fields_are_fixed_redacted_and_correlated() {
+        let sink = Arc::new(RecordingAudit::default());
+        let lifecycle = test_lifecycle(sink.clone());
+        let id = lifecycle.maintenance_id();
+        let op = "vault.signing-lease.renew/v1";
+        lifecycle
+            .maintenance_event(&id, op, AuditPhase::Authorized, "renew_started")
+            .unwrap();
+        lifecycle
+            .maintenance_event(&id, op, AuditPhase::Failed, "renew_failed")
+            .unwrap();
+        let events = sink.events.lock().unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].request_id, events[1].request_id);
+        assert_eq!(events[0].issuer, "<system>");
+        assert_eq!(events[0].subject, "<system>");
+        assert_eq!(events[0].target, "<provider>");
+        assert_eq!(events[1].phase, AuditPhase::Failed);
+        let json = serde_json::to_string(&*events).unwrap();
+        for sensitive in [
+            "SENSITIVE-SIGNER-TOKEN",
+            "secret_id",
+            "jwt_file",
+            "http://127.0.0.1:9",
+            "sign-only",
+        ] {
+            assert!(!json.contains(sensitive));
+        }
     }
 
     #[test]
