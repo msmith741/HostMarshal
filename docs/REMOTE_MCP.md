@@ -59,6 +59,8 @@ hostmarshal http --listen 127.0.0.1:8338 \
 
 The protected proxy must expose `https://mcp.example.invalid/mcp` and forward that same public Host header; if the proxy rewrites Host, configure `allowedHost` for the exact value the backend actually sees and enforce the expected external authority at the proxy. The proxy must not permit bypass and must not accept unauthenticated access. The JWT's audience remains the **external resource identifier**, never the loopback backend URL.
 
+The 2026-07-28 Streamable HTTP wire format additionally requires `MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` for named tool calls; values must match JSON-RPC body fields. Clients must supply per-request `_meta` containing the protocol version and capabilities. The SDK rejects missing or mismatched routing headers before tool invocation.
+
 ## Fault handling, testing and limitations
 
 `tests/remote_http_smoke.py` generates an ephemeral RSA issuer/JWKS and tests valid and invalid access tokens, cross-subject isolation, authorization denial, wrong Host/Origin, spoofed forwarded identity, invalid input, non-loopback binding, oversized bodies and key-file permissions. The test uses only local loopback connections and fictional hosts.

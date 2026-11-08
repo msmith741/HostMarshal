@@ -28,23 +28,29 @@ def port_available():
 
 
 def rpc(port, token, method, params=None, extra_headers=None, body=None):
+    metadata = {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/clientInfo": {
+            "name": "untrusted-client", "version": "1.0",
+        },
+    }
+    effective = {"_meta": metadata}
+    if params is not None:
+        effective.update(params)
+        effective["_meta"] = {**metadata, **params.get("_meta", {})}
     content = body if body is not None else json.dumps({
         "jsonrpc": "2.0", "id": 19, "method": method,
-        "params": params if params is not None else {
-            "_meta": {
-                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-                "io.modelcontextprotocol/clientCapabilities": {},
-                "io.modelcontextprotocol/clientInfo": {
-                    "name": "untrusted-client", "version": "1.0",
-                },
-            }
-        },
+        "params": effective,
     })
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json, text/event-stream",
         "MCP-Protocol-Version": "2026-07-28",
+        "Mcp-Method": method,
     }
+    if method == "tools/call" and params is not None and "name" in params:
+        headers["Mcp-Name"] = params["name"]
     if token is not None:
         headers["Authorization"] = f"Bearer {token}"
     if extra_headers:
@@ -193,6 +199,16 @@ def run():
                 extra_headers={"X-Forwarded-User": "operator-a"},
             )
             assert status == 401
+
+            # Modern HTTP requires routing headers consistent with the JSON-RPC body.
+            status, _ = rpc(port, valid, "tools/list", extra_headers={"Mcp-Method": "tools/call"})
+            assert status == 400, status
+            status, _ = rpc(
+                port, valid, "tools/call",
+                params={"name": "inventory.inspect", "arguments": {"target": "sample-linux"}},
+                extra_headers={"Mcp-Name": "different-tool"},
+            )
+            assert status == 400, status
 
             # The caller cannot select an arbitrary URL, command, or target.
             status, data = rpc(port, valid, "tools/call", {
