@@ -115,3 +115,18 @@ jobs:
         run: cargo +nightly-2026-11-06 install cargo-fuzz --locked --version 0.13.2
       - name: Build and run bounded fuzz target
         run: cargo +nightly-2026-11-06 fuzz run yaml_manifest -- -runs=512 -timeout=5 -max_len=8192
+
+  ingress-oauth:
+    name: Traefik isolation and real Keycloak OAuth interoperability
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build locked HostMarshal binary
+        run: cargo build --locked --bin hostmarshal
+      - name: Install pinned disposable test helpers
+        run: |
+          python3 -m venv .oauth-ci-venv
+          .oauth-ci-venv/bin/pip install --disable-pip-version-check -q 'PyJWT==2.10.1' 'cryptography==46.0.3'
+      - name: Test real OAuth issuer and TLS-only Traefik isolation
+        run: .oauth-ci-venv/bin/python tests/ingress_oidc_ci.py

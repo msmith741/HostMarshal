@@ -59,10 +59,10 @@ def generate_ca_and_leaf(folder, dns_name):
         "-out", str(leaf_csr), timeout=20)
     extensions = folder / "server.ext"
     extensions.write_text(
-        f"subjectAltName=DNS:{dns_name}\\n"
-        "basicConstraints=CA:FALSE\\n"
-        "keyUsage=digitalSignature,keyEncipherment\\n"
-        "extendedKeyUsage=serverAuth\\n"
+        f"subjectAltName=DNS:{dns_name}\n"
+        "basicConstraints=CA:FALSE\n"
+        "keyUsage=digitalSignature,keyEncipherment\n"
+        "extendedKeyUsage=serverAuth\n"
     )
     run("openssl", "x509", "-req", "-in", str(leaf_csr),
         "-CA", str(ca_cert), "-CAkey", str(ca_key), "-CAcreateserial",
@@ -82,7 +82,7 @@ def https_request(host, port, ca, method, path, headers=None, body=None):
     context = ssl.create_default_context(cafile=str(ca))
     connection = PinnedConnection(host, port, timeout=7, context=context)
     h = dict(headers or {})
-    h["Host"] = f"{host}:8444" if host == ISSUER_HOST else MCP_HOST
+    h.setdefault("Host", f"{host}:8444" if host == ISSUER_HOST else MCP_HOST)
     try:
         connection.request(method, path, body=body, headers=h)
         response = connection.getresponse()
@@ -219,7 +219,9 @@ def write_realm(path, client_secret):
         }],
     }
     path.write_text(json.dumps(realm))
-    path.chmod(0o600)
+    # This fixture is read-only mounted into non-root Keycloak; all secrets
+    # are disposable and never committed or logged.
+    path.chmod(0o644)
 
 
 def main():
@@ -246,7 +248,8 @@ def main():
         created.append(("network", network))
         kc_args = [
             "docker", "run", "-d", "--name", keycloak,
-            "--network", network, "--restart", "no",
+            "--network", network, "--network-alias", "hostmarshal-keycloak",
+            "--restart", "no",
             "-e", "KC_HTTP_ENABLED=true",
             "-e", "KC_PROXY_HEADERS=xforwarded",
             "-e", f"KC_HOSTNAME=https://{ISSUER_HOST}:8444",
@@ -420,22 +423,14 @@ def main():
             "/.well-known/oauth-protected-resource/mcp",
             headers={"Host": "attacker.invalid"},
         )
-        # Host is forced to trusted value above by our client helper;
-        # verify the actual Traefik rule separately using an explicit
-        # low-level malicious host request below.
-        del wrong_host
+        assert wrong_host[0] in (404, 421), wrong_host[0]
         print("CI: real Keycloak token/discovery, Traefik ingress, bypass isolation PASS")
     finally:
         for kind, value in reversed(created):
-            run(
-                "docker", "rm" if kind == "container" else "network",
-                "-f" if kind == "container" else "rm",
-                value,
-                check=False, timeout=35,
-            ) if kind == "container" else run(
-                "docker", "network", "rm", value,
-                check=False, timeout=35,
-            )
+            if kind == "container":
+                run("docker", "rm", "-f", value, check=False, timeout=35)
+            else:
+                run("docker", "network", "rm", value, check=False, timeout=35)
         shutil.rmtree(root, ignore_errors=True)
 
 
