@@ -1,5 +1,5 @@
 //! HostMarshal capability core and MCP interfaces.
-//! Live host access is deliberately not implemented in pre-alpha.
+//! Only vetted read-only host observations are available in pre-alpha.
 pub mod adapter;
 pub mod audit;
 pub mod authorization;

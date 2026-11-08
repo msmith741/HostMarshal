@@ -15,6 +15,7 @@
 | [0009](0009-mcp-is-a-protocol-adapter.md) | MCP as a protocol adapter | Proposed |
 | [0010](0010-versioning-and-compatibility.md) | Versioning and compatibility | Proposed |
 | [0011](0011-readonly-network-observation.md) | Restricted read-only SSH/HTTPS network observation | Accepted |
+| [0012](0012-m4-remote-identity-and-credential-providers.md) | Remote identity and provider security boundaries | Proposed |
 
 ## How to use ADRs
 

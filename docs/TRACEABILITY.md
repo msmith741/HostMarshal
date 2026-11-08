@@ -81,6 +81,11 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 - **NFR-001/002/004:** `tests/transport_smoke.py` uses disposable `sshd` and a locally CA-signed TLS server; tests allowed calls, denied identities/targets, wrong host key and CA, bad mappings, forbidden arguments, redirected response and timeout. `tests/schema_conformance.py` separately validates M3 YAML examples and negative fixtures. CI runs this alongside existing M1/M2 suites and fuzzing.
 - **Residual risks:** privileges on the service OS account and key/trust paths, root CA/DNS compromise, filesystem replacement races, lack of network egress sandbox, remote work after local cancellation, local-only audit integrity, and external client authentication remain **outside verified M3 guarantees**. See [ADR-0011](adr/0011-readonly-network-observation.md) and [M3 operations](OBSERVATION_ADAPTERS.md).
 
+## M4 in-progress evidence
+
+- **Provider routing foundation:** `src/provider_router.rs` rejects duplicate or malformed operation/target/purpose routes, missing routes, cross-target and cross-operation requests, mismatched returned leases and unavailable providers. Provider failures never cause fallback to a broader credential source.
+- **Not yet implemented:** remote authenticated Streamable HTTP, issuer/audience/JWKS validation, Vault-issued SSH user certificates, lease expiry/revocation, and hypervisor adapter. **No M4 completion claim** is made. See [M4 implementation plan](M4_IMPLEMENTATION_PLAN.md) and [ADR-0012](adr/0012-m4-remote-identity-and-credential-providers.md).
+
 ## CI acceptance rules
 
 Do not change **In progress** to **Implemented (tested)** without observing successful checks for the specific source revision. Every new requirement must map to code, tests, and appropriate ADR. Tests must demonstrate **denial** as well as success.

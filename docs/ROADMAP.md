@@ -48,6 +48,8 @@
 - Authenticated MCP Streamable HTTP, authorization-server and audience validation, network hardening.
 - Additional provider-neutral reference adapters (e.g., a hypervisor API) only after M2/M3 controls.
 
+**M4 progress:** a fail-closed, exact operation/target/purpose credential provider router and negative-path unit tests have been added. This is an **internal foundation only**: remote authenticated HTTP and Vault integration are not implemented or exposed. See [M4 implementation gates](M4_IMPLEMENTATION_PLAN.md) and [proposed ADR-0012](adr/0012-m4-remote-identity-and-credential-providers.md).
+
 **Gate:** multiple identities, policy scopes and secret backends can be configured without source code changes or assumptions about infrastructure.
 
 ## M5 — External extension ecosystem

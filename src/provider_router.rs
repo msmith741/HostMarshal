@@ -61,9 +61,10 @@ impl RoutedCredentialBroker {
         provider: Arc<dyn CredentialBroker>,
     ) -> Result<()> {
         ensure!(
-            self.providers.insert(route.clone(), provider).is_none(),
+            !self.providers.contains_key(&route),
             "duplicate credential provider route: {route:?}"
         );
+        self.providers.insert(route, provider);
         Ok(())
     }
 }
