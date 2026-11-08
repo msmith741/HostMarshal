@@ -12,3 +12,5 @@ pub mod runtime;
 pub mod schema;
 pub mod snapshot;
 pub mod transport;
+
+pub mod provider_router;
