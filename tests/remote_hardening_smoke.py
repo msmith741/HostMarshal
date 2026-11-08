@@ -94,7 +94,7 @@ def request_tls(port, cert, method, path, token=None, extra=None):
         connection.request(method, path, body=body, headers=headers)
         response = connection.getresponse()
         data = response.read()
-        return response.status, dict(response.getheaders()), data
+        return response.status, {key.lower(): value for key, value in response.getheaders()}, data
     finally:
         connection.close()
 
@@ -231,12 +231,12 @@ def main():
                 "scopes_supported": ["hostmarshal.observe"],
                 "bearer_methods_supported": ["header"],
             }, meta
-            assert hdr["Cache-Control"] == "no-store", hdr
+            assert hdr["cache-control"] == "no-store", hdr
             status, hdr, _ = request_tls(
                 ingress_port, ingress_cert, "POST", "/mcp",
             )
-            assert status == 401 and "resource_metadata=" in hdr["WWW-Authenticate"], (status, hdr)
-            assert "https://mcp.example.invalid/.well-known/oauth-protected-resource/mcp" in hdr["WWW-Authenticate"]
+            assert status == 401 and "resource_metadata=" in hdr["www-authenticate"], (status, hdr)
+            assert "https://mcp.example.invalid/.well-known/oauth-protected-resource/mcp" in hdr["www-authenticate"]
 
             status, _, payload = request_tls(ingress_port, ingress_cert, "POST", "/mcp", valid_a)
             assert status == 200 and "inventory.inspect" in payload.decode(), (status, payload)

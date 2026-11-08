@@ -67,6 +67,7 @@ jobs:
           python3 -m venv .remote-auth-venv
           .remote-auth-venv/bin/pip install --disable-pip-version-check -q 'PyJWT==2.10.1' 'cryptography==46.0.3'
           .remote-auth-venv/bin/python tests/remote_http_smoke.py
+          .remote-auth-venv/bin/python tests/remote_hardening_smoke.py
 
   vault-real:
     name: Real Vault TLS SSH signer interoperability
