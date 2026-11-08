@@ -242,7 +242,7 @@ def main():
                 "token_no_default_policy": True,
                 "token_policies": ["hostmarshal-sign-only"],
                 "token_type": "service",
-                "token_ttl": "90s",
+                "token_ttl": "30s",
                 "token_max_ttl": "6m",
             }, root_token)
             role_id = api("GET", "auth/approle/role/hostmarshal/role-id",
@@ -303,8 +303,8 @@ def main():
                 "roleIdFile": str(role_file),
                 "secretIdFile": str(secret_file),
                 "expectedPolicy": "hostmarshal-sign-only",
-                # Exceeds 90-second TTL intentionally: every subsequent call
-                # must exercise renew-self, rather than silently using a cache.
+                # Exceeds the 30-second lease deliberately: renewals must
+                # still honor one-third-TTL minimum spacing.
                 "renewBeforeSeconds": 120,
                 "recoveryEpochFile": str(recovery_file),
             }
@@ -344,10 +344,12 @@ def main():
                     assert result["structuredContent"] == {"id": TARGET, "os": "Linux"}
                 assert not list(ephemeral.iterdir())
             observe_app(True)   # AppRole login obtains first restricted token
+            time.sleep(11)
             observe_app(True)   # renew-self must work for a reusable session
             api("PUT", "sys/policies/acl/hostmarshal-sign-only",
                 {"policy": policy}, root_token)
-            observe_app(False)  # failed renew-self quarantines token
+            time.sleep(11)
+            observe_app(False)  # failed background renew-self quarantines token
             api("PUT", "sys/policies/acl/hostmarshal-sign-only",
                 {"policy": renewable_policy}, root_token)
             observe_app(False)  # must NOT silently re-login with SecretID
@@ -449,7 +451,7 @@ def main():
                 "token_no_default_policy": True,
                 "token_policies": ["hostmarshal-sign-only"],
                 "token_type": "service",
-                "token_ttl": "90s",
+                "token_ttl": "30s",
                 "token_max_ttl": "6m",
             }, root_token)
 
@@ -518,9 +520,11 @@ def main():
                 assert not list(ephemeral.iterdir())
 
             observe_jwt(True)   # genuine Vault JWT authentication
-            observe_jwt(True)   # forced, policy-constrained renew-self
+            time.sleep(11)
+            observe_jwt(True)   # bounded, policy-constrained renew-self
             api("PUT", "sys/policies/acl/hostmarshal-sign-only",
                 {"policy": policy}, root_token)
+            time.sleep(11)
             observe_jwt(False)  # renewal revoked => sticky quarantine
             api("PUT", "sys/policies/acl/hostmarshal-sign-only",
                 {"policy": renewable_policy}, root_token)
