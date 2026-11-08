@@ -132,7 +132,10 @@ async fn main() -> Result<()> {
                 };
                 remaining = rest;
             }
-            serve_remote_http(address, directory, auth_file, audit_file, ssh_map, vault_ssh).await
+            serve_remote_http(
+                address, directory, auth_file, audit_file, ssh_map, vault_ssh,
+            )
+            .await
         }
         [flag, directory, principal_flag, principal, rest @ ..]
             if flag == "--config-dir" && principal_flag == "--principal" =>
@@ -278,7 +281,10 @@ fn choose_broker(
     );
     match (ssh_map, vault_ssh) {
         (Some(path), None) => Ok(Arc::new(LocalSshKeyBroker::load(Path::new(path))?)),
-        (None, Some(path)) => Ok(Arc::new(VaultSshCertificateBroker::load(Path::new(path), config)?)),
+        (None, Some(path)) => Ok(Arc::new(VaultSshCertificateBroker::load(
+            Path::new(path),
+            config,
+        )?)),
         (None, None) => Ok(Arc::new(DenyCredentialBroker)),
         (Some(_), Some(_)) => unreachable!("conflicting sources rejected"),
     }

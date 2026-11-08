@@ -101,8 +101,11 @@ impl CredentialLease {
     /// A temporary SSH cert must remain valid through the full remaining
     /// adapter deadline and skew margin; static keys have no expiry metadata.
     pub fn valid_for(&self, duration: Duration) -> bool {
-        self.expires_at
-            .is_none_or(|expiry| SystemTime::now().checked_add(duration).is_some_and(|until| expiry > until))
+        self.expires_at.is_none_or(|expiry| {
+            SystemTime::now()
+                .checked_add(duration)
+                .is_some_and(|until| expiry > until)
+        })
     }
 
     pub fn scope(&self) -> &CredentialScope {
@@ -260,7 +263,10 @@ mod tests {
     use super::*;
     #[test]
     fn ephemeral_lease_cleans_up_material_and_enforces_expiry() {
-        let tmp = tempfile::Builder::new().prefix("hm-lease-test").tempdir().unwrap();
+        let tmp = tempfile::Builder::new()
+            .prefix("hm-lease-test")
+            .tempdir()
+            .unwrap();
         let identity = tmp.path().join("identity");
         let cert = tmp.path().join("identity-cert.pub");
         std::fs::write(&identity, b"test-private-key").unwrap();
@@ -268,7 +274,11 @@ mod tests {
         let expires = SystemTime::now() + Duration::from_secs(30);
         let lease = CredentialLease::new_ephemeral_ssh_certificate(
             CredentialScope::new("builtin.linux.uname/v1", "host-a", "ssh-observe"),
-            tmp, identity.clone(), cert.clone(), "observer".into(), expires,
+            tmp,
+            identity.clone(),
+            cert.clone(),
+            "observer".into(),
+            expires,
         );
         assert_eq!(lease.certificate_principal(), Some("observer"));
         assert_eq!(lease.certificate_path(), Some(cert.as_path()));

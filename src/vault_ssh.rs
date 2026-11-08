@@ -82,37 +82,63 @@ fn safe_segment(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 64
         && !value.starts_with('-')
-        && value.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
 }
 
 impl VaultSshCertificateBroker {
     pub fn load(path: &Path, config: &CompiledConfig) -> Result<Self> {
         check_private_key_file(path).context("Vault signer config must be protected")?;
         let content = fs::read(path)?;
-        ensure!(content.len() <= 32 * 1024, "Vault signer config exceeds limit");
+        ensure!(
+            content.len() <= 32 * 1024,
+            "Vault signer config exceeds limit"
+        );
         let spec: VaultSshConfig = serde_json::from_slice(&content)?;
-        ensure!(spec.api_version == API_VERSION, "unsupported Vault signer configuration");
-        ensure!(safe_segment(&spec.mount) && safe_segment(&spec.role),
-            "invalid Vault SSH mount or role");
-        ensure!((30..=300).contains(&spec.ttl_seconds), "Vault SSH TTL outside allowed range");
-        ensure!(!spec.targets.is_empty() && spec.targets.len() <= 128,
-            "invalid number of Vault SSH target bindings");
+        ensure!(
+            spec.api_version == API_VERSION,
+            "unsupported Vault signer configuration"
+        );
+        ensure!(
+            safe_segment(&spec.mount) && safe_segment(&spec.role),
+            "invalid Vault SSH mount or role"
+        );
+        ensure!(
+            (30..=300).contains(&spec.ttl_seconds),
+            "Vault SSH TTL outside allowed range"
+        );
+        ensure!(
+            !spec.targets.is_empty() && spec.targets.len() <= 128,
+            "invalid number of Vault SSH target bindings"
+        );
 
         let url = Url::parse(&spec.vault_address)?;
-        ensure!(url.scheme() == "https" && url.host_str().is_some()
-            && url.username().is_empty() && url.password().is_none()
-            && url.query().is_none() && url.fragment().is_none()
-            && (url.path() == "/" || url.path().is_empty()),
-            "Vault address must be an HTTPS origin");
+        ensure!(
+            url.scheme() == "https"
+                && url.host_str().is_some()
+                && url.username().is_empty()
+                && url.password().is_none()
+                && url.query().is_none()
+                && url.fragment().is_none()
+                && (url.path() == "/" || url.path().is_empty()),
+            "Vault address must be an HTTPS origin"
+        );
         let signing_url = url.join(&format!("v1/{}/sign/{}", spec.mount, spec.role))?;
 
         check_private_key_file(&spec.token_file).context("Vault token file not protected")?;
-        ensure!(spec.ca_certificate_file.is_absolute(), "Vault TLS CA path must be absolute");
+        ensure!(
+            spec.ca_certificate_file.is_absolute(),
+            "Vault TLS CA path must be absolute"
+        );
         check_public_trust_file(&spec.ca_certificate_file)
             .context("untrusted Vault TLS CA file")?;
         let tls_pem = fs::read(&spec.ca_certificate_file)?;
         let tls_ca = reqwest::Certificate::from_pem(&tls_pem)?;
-        ensure!(spec.ssh_ca_public_key_file.is_absolute(), "SSH CA path must be absolute");
+        ensure!(
+            spec.ssh_ca_public_key_file.is_absolute(),
+            "SSH CA path must be absolute"
+        );
         check_public_trust_file(&spec.ssh_ca_public_key_file)
             .context("untrusted SSH signing CA file")?;
         let public_ca = PublicKey::read_openssh_file(&spec.ssh_ca_public_key_file)?;
@@ -120,15 +146,32 @@ impl VaultSshCertificateBroker {
 
         let mut bindings = BTreeMap::new();
         for target in spec.targets {
-            ensure!(safe_segment(&target.target) && safe_segment(&target.principal),
-                "invalid Vault SSH target or principal");
-            let host = config.hosts.get(&target.target)
+            ensure!(
+                safe_segment(&target.target) && safe_segment(&target.principal),
+                "invalid Vault SSH target or principal"
+            );
+            let host = config
+                .hosts
+                .get(&target.target)
                 .context("Vault SSH binding target not in inventory")?;
-            ensure!(host.spec.ssh.as_ref().is_some_and(|ssh| ssh.user == target.principal),
-                "Vault SSH principal must exactly match trusted inventory SSH user");
-            ensure!(bindings.insert(target.target, TargetBinding {
-                principal: target.principal
-            }).is_none(), "duplicate Vault SSH target binding");
+            ensure!(
+                host.spec
+                    .ssh
+                    .as_ref()
+                    .is_some_and(|ssh| ssh.user == target.principal),
+                "Vault SSH principal must exactly match trusted inventory SSH user"
+            );
+            ensure!(
+                bindings
+                    .insert(
+                        target.target,
+                        TargetBinding {
+                            principal: target.principal
+                        }
+                    )
+                    .is_none(),
+                "duplicate Vault SSH target binding"
+            );
         }
         let client = Client::builder()
             .https_only(true)
@@ -163,9 +206,13 @@ impl VaultSshCertificateBroker {
         let identity = directory.path().join("id_ed25519");
         let mut keygen = Command::new("/usr/bin/ssh-keygen");
         let status = keygen
-            .arg("-q").arg("-t").arg("ed25519")
-            .arg("-N").arg("")
-            .arg("-f").arg(&identity)
+            .arg("-q")
+            .arg("-t")
+            .arg("ed25519")
+            .arg("-N")
+            .arg("")
+            .arg("-f")
+            .arg(&identity)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -178,29 +225,30 @@ impl VaultSshCertificateBroker {
         }
         check_private_key_file(&identity).map_err(|_| BrokerFailure::Unavailable)?;
         let public_path = directory.path().join("id_ed25519.pub");
-        let public_string = fs::read_to_string(&public_path)
-            .map_err(|_| BrokerFailure::Unavailable)?;
+        let public_string =
+            fs::read_to_string(&public_path).map_err(|_| BrokerFailure::Unavailable)?;
         if public_string.len() > 4096 {
             return Err(BrokerFailure::Denied);
         }
-        let public_key = PublicKey::from_openssh(&public_string)
-            .map_err(|_| BrokerFailure::Denied)?;
+        let public_key =
+            PublicKey::from_openssh(&public_string).map_err(|_| BrokerFailure::Denied)?;
 
         // No environment-variable Vault token or forwarded MCP credential:
         // read the protected OS-controlled token file at each issuance for
         // operator-driven rotation; never log token or raw response.
-        check_private_key_file(&self.token_file)
-            .map_err(|_| BrokerFailure::Unavailable)?;
-        let raw_token = fs::read_to_string(&self.token_file)
-            .map_err(|_| BrokerFailure::Unavailable)?;
+        check_private_key_file(&self.token_file).map_err(|_| BrokerFailure::Unavailable)?;
+        let raw_token =
+            fs::read_to_string(&self.token_file).map_err(|_| BrokerFailure::Unavailable)?;
         let token = raw_token.trim_end_matches(['\r', '\n']);
-        if token.is_empty() || token.len() > 4096
+        if token.is_empty()
+            || token.len() > 4096
             || !token.bytes().all(|byte| byte.is_ascii_graphic())
         {
             return Err(BrokerFailure::Denied);
         }
         let token_header = HeaderValue::from_str(token).map_err(|_| BrokerFailure::Denied)?;
-        let response = self.client
+        let response = self
+            .client
             .post(self.signing_url.clone())
             .header("X-Vault-Token", token_header)
             .json(&json!({
@@ -211,21 +259,27 @@ impl VaultSshCertificateBroker {
                 "key_id": format!("hostmarshal-{}", scope.target()),
                 "extensions": {}
             }))
-            .send().await.map_err(|_| BrokerFailure::Unavailable)?;
+            .send()
+            .await
+            .map_err(|_| BrokerFailure::Unavailable)?;
         if !response.status().is_success() {
             return Err(BrokerFailure::Denied);
         }
 
         let mut response = response;
         let mut bytes = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(|_| BrokerFailure::Unavailable)? {
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| BrokerFailure::Unavailable)?
+        {
             if bytes.len().saturating_add(chunk.len()) > 16 * 1024 {
                 return Err(BrokerFailure::Denied);
             }
             bytes.extend_from_slice(&chunk);
         }
-        let envelope: SignEnvelope = serde_json::from_slice(&bytes)
-            .map_err(|_| BrokerFailure::Denied)?;
+        let envelope: SignEnvelope =
+            serde_json::from_slice(&bytes).map_err(|_| BrokerFailure::Denied)?;
         let signed = envelope.data.ok_or(BrokerFailure::Denied)?.signed_key;
         if signed.len() > 8192 {
             return Err(BrokerFailure::Denied);
@@ -236,19 +290,28 @@ impl VaultSshCertificateBroker {
             &public_key,
             &self.signing_ca,
             &binding.principal,
-            self.ttl_seconds
+            self.ttl_seconds,
         )?;
         let expiration = UNIX_EPOCH + Duration::from_secs(cert.valid_before());
         let cert_path = directory.path().join("id_ed25519-cert.pub");
         {
-            let mut out = fs::OpenOptions::new().write(true).create_new(true)
-                .open(&cert_path).map_err(|_| BrokerFailure::Unavailable)?;
-            out.write_all(signed.as_bytes()).map_err(|_| BrokerFailure::Unavailable)?;
-            out.write_all(b"\n").map_err(|_| BrokerFailure::Unavailable)?;
+            let mut out = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&cert_path)
+                .map_err(|_| BrokerFailure::Unavailable)?;
+            out.write_all(signed.as_bytes())
+                .map_err(|_| BrokerFailure::Unavailable)?;
+            out.write_all(b"\n")
+                .map_err(|_| BrokerFailure::Unavailable)?;
         }
         Ok(CredentialLease::new_ephemeral_ssh_certificate(
-            scope, directory, identity, cert_path,
-            binding.principal.clone(), expiration
+            scope,
+            directory,
+            identity,
+            cert_path,
+            binding.principal.clone(),
+            expiration,
         ))
     }
 }
@@ -260,7 +323,8 @@ fn validate_signed_cert(
     principal: &str,
     ttl: u64,
 ) -> Result<(), BrokerFailure> {
-    cert.validate(&[*signing_ca]).map_err(|_| BrokerFailure::Denied)?;
+    cert.validate(&[*signing_ca])
+        .map_err(|_| BrokerFailure::Denied)?;
     if cert.cert_type() != CertType::User
         || cert.public_key() != public.key_data()
         || cert.valid_principals().len() != 1
@@ -270,8 +334,10 @@ fn validate_signed_cert(
     {
         return Err(BrokerFailure::Denied);
     }
-    let now = SystemTime::now().duration_since(UNIX_EPOCH)
-        .map_err(|_| BrokerFailure::Denied)?.as_secs();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| BrokerFailure::Denied)?
+        .as_secs();
     if cert.valid_before() < now.saturating_add(CERT_MARGIN_SECONDS)
         || cert.valid_before() > now.saturating_add(ttl + 10)
     {
@@ -303,7 +369,15 @@ mod tests {
 
     #[test]
     fn path_segments_cannot_select_another_vault_role() {
-        for value in ["", "../ssh", "a/b", "-role", "role%2fother", "role?x=1", "x\n"] {
+        for value in [
+            "",
+            "../ssh",
+            "a/b",
+            "-role",
+            "role%2fother",
+            "role?x=1",
+            "x\n",
+        ] {
             assert!(!safe_segment(value), "{value}");
         }
         for value in ["ssh", "role_01", "host-1"] {

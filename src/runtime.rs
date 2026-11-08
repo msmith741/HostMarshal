@@ -302,7 +302,7 @@ impl ExecutionCoordinator {
                             return self.fail(&event, RuntimeFailure::BrokerUnavailable);
                         }
                         Some(received)
-                    },
+                    }
                     Err(_) => return self.fail(&event, RuntimeFailure::TimedOut),
                     _ => return self.fail(&event, RuntimeFailure::BrokerUnavailable),
                 }
