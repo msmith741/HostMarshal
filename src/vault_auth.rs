@@ -917,9 +917,7 @@ mod tests {
 
         // Disposable HTTP fixture tests only the state/audit path. Actual
         // Vault client construction enforces pinned HTTPS in integration CI.
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
@@ -940,10 +938,7 @@ mod tests {
                 maintain_at: now - Duration::from_secs(1),
             }))),
             policy: "sign-only".to_owned(),
-            renew_url: Url::parse(&format!(
-                "http://{addr}/v1/auth/token/renew-self"
-            ))
-            .unwrap(),
+            renew_url: Url::parse(&format!("http://{addr}/v1/auth/token/renew-self")).unwrap(),
             renew_before: Duration::from_secs(15),
             recovery_epoch_file: None,
             audit: Arc::new(FailTerminalAudit),
