@@ -127,7 +127,9 @@ fn check_workload_jwt(path: &Path) -> std::io::Result<()> {
     {
         use std::os::unix::fs::PermissionsExt;
         if parent_meta.permissions().mode() & 0o022 != 0 {
-            return Err(Error::other("workload JWT parent is writable by other principals"));
+            return Err(Error::other(
+                "workload JWT parent is writable by other principals",
+            ));
         }
     }
     let link = fs::symlink_metadata(path)?;
@@ -168,9 +170,9 @@ fn workload_jwt(path: &Path) -> Result<Zeroizing<String>, BrokerFailure> {
     if jwt.is_empty()
         || jwt.len() > 8192
         || jwt.split('.').count() != 3
-        || !jwt.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_')
-        })
+        || !jwt
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
     {
         return Err(BrokerFailure::Denied);
     }
@@ -371,7 +373,8 @@ impl VaultAuth {
         ensure!(
             usize::from(token_file.is_some())
                 + usize::from(app_role.is_some())
-                + usize::from(jwt_auth.is_some()) == 1,
+                + usize::from(jwt_auth.is_some())
+                == 1,
             "choose exactly one Vault tokenFile, appRole or jwtAuth authentication source"
         );
         if let Some(path) = token_file {
@@ -380,9 +383,7 @@ impl VaultAuth {
         }
         if let Some(cfg) = jwt_auth {
             ensure!(
-                segment(&cfg.auth_mount)
-                    && segment(&cfg.role)
-                    && segment(&cfg.expected_policy),
+                segment(&cfg.auth_mount) && segment(&cfg.role) && segment(&cfg.expected_policy),
                 "invalid Vault JWT auth mount, role or policy"
             );
             ensure!(
