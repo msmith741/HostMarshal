@@ -79,7 +79,8 @@ pub struct BoundedAuditSink {
 
 impl BoundedAuditSink {
     pub fn from_spec(sink: Arc<dyn AuditSink>, spec: &AuditDeliverySpec) -> io::Result<Self> {
-        spec.validate().map_err(io::Error::other)?;
+        spec.validate()
+            .map_err(|_| io::Error::other("invalid audit delivery configuration"))?;
         Self::new(
             sink,
             spec.queue_capacity,
@@ -95,7 +96,10 @@ impl BoundedAuditSink {
         queue_capacity: usize,
         ack_timeout: Duration,
     ) -> io::Result<Self> {
-        if !(1..=256).contains(&queue_capacity) || ack_timeout.is_zero() {
+        if !(1..=256).contains(&queue_capacity)
+            || ack_timeout.is_zero()
+            || ack_timeout > Duration::from_secs(5)
+        {
             return Err(io::Error::other("invalid bounded audit configuration"));
         }
         let (sender, receiver) = mpsc::sync_channel::<Delivery>(queue_capacity);
