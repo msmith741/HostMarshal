@@ -31,13 +31,45 @@ def classify(paths):
     if paths is None or not paths:
         return ALL.copy()
     result = NONE.copy()
+    # Exact known source and test paths prevent a newly added similarly
+    # named module from inheriting a narrow classification by accident.
+    parser_files = {
+        "src/declarative.rs", "src/schema.rs", "src/snapshot.rs",
+        "tests/schema_conformance.py", "tests/declarative_smoke.py",
+    }
+    vault_files = {
+        "src/vault_auth.rs", "src/vault_ssh.rs", "src/credentials.rs",
+        "src/provider_router.rs", "tests/vault_real_smoke.py",
+        "tests/vault_ssh_smoke.py",
+    }
+    remote_files = {
+        "src/remote_auth.rs", "src/remote_http.rs",
+        "tests/remote_http_smoke.py", "tests/remote_hardening_smoke.py",
+        "tests/ingress_oidc_ci.py",
+    }
+    shared_security_files = {
+        "src/audit.rs", "src/audit_delivery.rs", "src/audit_evidence.rs",
+        "src/main.rs", "src/runtime.rs", "src/adapter.rs",
+        "src/authorization.rs", "src/identity.rs",
+        "src/dynamic_mcp.rs", "src/lib.rs",
+        "tests/audit_smoke.py", "tests/audit_delivery_smoke.py",
+        "tests/audit_evidence_smoke.py",
+    }
+    observation_files = {
+        "src/observation.rs", "src/transport.rs",
+        "tests/transport_smoke.py",
+    }
+    protocol_tests = {
+        "tests/mcp_smoke.py", "tests/mcp_modern_smoke.py",
+        "tests/policy_explain_smoke.py", "tests/reload_smoke.py",
+    }
     for path in paths:
         if not path or path.startswith("/") or "\\" in path or ".." in PurePosixPath(path).parts:
             return ALL.copy()
-        if path.startswith(("docs/",)) or path in {"README.md", "SECURITY.md", "LICENSE", "NOTICE"}:
+        if ((path.startswith("docs/") and path.endswith(".md"))
+                or path in {"README.md", "SECURITY.md", "LICENSE", "NOTICE"}):
             continue
-        # CI selector and GitHub policy modifications must prove every lane,
-        # even if this increases testing for the change that introduces them.
+        # CI selector and workflow modifications must prove every lane.
         if path.startswith(".github/") or path in {"tests/ci_select.py", "tests/test_ci_select.py"}:
             return ALL.copy()
         if path.startswith(("Cargo.", "rust-toolchain", "build.rs")):
@@ -47,46 +79,37 @@ def classify(paths):
             result["isolation"] = True
             result["oauth"] = True
             continue
-        if path.startswith(("fuzz/", "schemas/", "config/")) or path.startswith(
-            ("src/declarative", "src/schema", "src/snapshot", "tests/schema_", "tests/declarative_")
-        ):
+        if path in parser_files or path.startswith(("fuzz/", "schemas/", "config/")):
             result["core"] = True
             result["fuzz"] = True
             continue
-        if path.startswith(("src/vault", "src/credentials", "src/provider_router", "tests/vault_")):
+        if path in vault_files:
             result["core"] = True
             result["vault"] = True
             continue
-        if path.startswith(("src/remote_", "src/http_", "tests/remote_", "tests/ingress_")):
+        if path in remote_files:
             result["core"] = True
             result["oauth"] = True
             result["k3s"] = True
             continue
-        if path.startswith((
-            "src/audit", "tests/audit_", "src/main.rs", "src/runtime",
-            "src/adapter.rs", "src/authorization.rs", "src/identity.rs",
-            "src/dynamic_mcp.rs", "src/lib.rs",
-        )):
+        if path in shared_security_files:
             result["core"] = True
             result["vault"] = True
             result["oauth"] = True
             result["k3s"] = True
             continue
-        if path.startswith(("src/observation.rs", "src/transport.rs", "tests/transport_")):
+        if path in observation_files:
             result["core"] = True
             result["vault"] = True
             continue
-        if path.startswith(("tests/mcp_", "tests/policy_", "tests/reload_")):
+        if path in protocol_tests:
             result["core"] = True
             continue
-        if path.startswith(("examples/",)):
+        if path.startswith("examples/"):
             result["core"] = True
             continue
-        # A new or unclassified source/test/script may carry any privilege
-        # boundary. Treat it as security-affecting until maintainers classify it.
-        if path.startswith(("src/", "tests/", "scripts/")):
-            return ALL.copy()
-        # Unrecognized project assets should never accidentally skip tests.
+        # Unrecognized code, scripts, tests, docs assets and future security
+        # modules are always broad integration candidates.
         return ALL.copy()
     return result
 
