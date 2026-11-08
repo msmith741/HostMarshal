@@ -10,7 +10,7 @@ A change to:
 
 | Files | Selected suites |
 | --- | --- |
-| Documentation only (`docs/**`, README, SECURITY) | Selector tests only; all builds safely skipped |
+| Markdown documentation only (`docs/**/*.md`, README.md, SECURITY.md) | Selector tests only; all builds safely skipped |
 | Core source or normal tests | Rust formatting, Clippy, unit/MCP/schema/stdio contract lane |
 | Parser, schema, YAML/fuzz code | Core + coverage-guided fuzz |
 | Vault signer, credential or provider-router code | Core + disposable real Vault SSH signer |
