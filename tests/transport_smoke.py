@@ -98,9 +98,14 @@ def start_ssh(root):
             "-f", str(root / "host_key"))
     command("ssh-keygen", "-q", "-t", "ed25519", "-N", "",
             "-f", str(root / "other_host_key"))
-    command("sudo", "useradd", "-m", "-s", "/bin/sh", USER)
-    # Random ephemeral test-only password, password authentication disabled.
-    command("sudo", "chpasswd", input_text=f"{USER}:{os.urandom(24).hex()}\n")
+    # CI provisions its accounts in a bounded prerequisite step to avoid
+    # intermittent passwd/NSS locks. Local standalone runs can still create it.
+    exists = subprocess.run(["id", "-u", USER], capture_output=True, timeout=5)
+    if exists.returncode != 0:
+        command("sudo", "-n", "useradd", "-m", "-s", "/bin/sh", USER)
+        # Random ephemeral test-only password, password authentication disabled.
+        command("sudo", "-n", "chpasswd",
+                input_text=f"{USER}:{os.urandom(24).hex()}\n")
     command("sudo", "install", "-d", "-m", "0755", "/run/sshd")
     # SSHD must read authorized_keys as the unprivileged login account.
     # The test temp directory is 0700 to the CI runner and inaccessible there.

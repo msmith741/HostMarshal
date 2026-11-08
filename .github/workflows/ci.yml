@@ -39,6 +39,20 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server
+      - name: Provision disposable SSH accounts with bounded retries
+        run: |
+          for user in hmobserver hmvault; do
+            for attempt in 1 2 3; do
+              if getent passwd "$user" >/dev/null; then break; fi
+              if sudo -n timeout -k 2s 12s useradd -m -s /bin/sh "$user"; then break; fi
+              if [ "$attempt" -eq 3 ]; then
+                echo "failed to provision disposable account: $user" >&2
+                exit 1
+              fi
+              sleep 2
+            done
+            printf '%s:%s\n' "$user" "$(openssl rand -hex 24)" | sudo -n chpasswd
+          done
       - name: Build and exercise MCP over stdio
         run: |
           cargo build --locked --bin hostmarshal
