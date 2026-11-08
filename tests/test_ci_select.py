@@ -14,6 +14,21 @@ class SelectionTests(unittest.TestCase):
         self.assertTrue(all(selected.choose("schedule", "", "", []).values()))
         self.assertTrue(all(selected.choose("push", "0" * 40, "abcdef").values()))
 
+    def test_new_source_lookalikes_and_nonmarkdown_docs_force_full(self):
+        # Paths not reviewed in this allowlist cannot impersonate a narrow
+        # already-known module merely by sharing its filename prefix.
+        for path in (
+            "docs/fixtures/privileged_config.yaml",
+            "docs/bootstrap.sh",
+            "src/vault_unreviewed.rs",
+            "src/remote_auth_v2.rs",
+            "src/audit_new.rs",
+            "src/declarative_unsafe.rs",
+            "tests/vault_extra.py",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(all(selected.classify([path]).values()))
+
     def test_vault_only_skips_unrelated_clusters_and_fuzz(self):
         value = selected.classify(["src/vault_auth.rs"])
         self.assertTrue(value["core"] and value["vault"])
