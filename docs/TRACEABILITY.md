@@ -100,7 +100,7 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 ## M4 in-progress evidence
 
 - **Provider routing foundation:** `src/provider_router.rs` rejects duplicate or malformed operation/target/purpose routes, missing routes, cross-target and cross-operation requests, mismatched returned leases and unavailable providers. Provider failures never cause fallback to a broader credential source.
-- **Implemented in M4 pilot:** signed-JWT loopback HTTP plus opt-in Vault SSH signing with ephemeral, expiry-checked user certificate leases. **Not implemented:** Kubernetes-native workload federation or proactive background token renewal, complete OIDC authorization flow, production TLS ingress deployment and independent tamper-evident audit; optional online JWKS and RFC 9728 protected-resource metadata test slices now exist. An experimental file-backed AppRole identity with request-driven token self-renewal is implemented. Real Vault 2.2.1 dev-server signing has passed an isolated CI gate. **No M4 completion claim** is made. See [M4 implementation plan](M4_IMPLEMENTATION_PLAN.md) and [ADR-0012](adr/0012-m4-remote-identity-and-credential-providers.md).
+- **Implemented in M4 pilot:** signed-JWT loopback HTTP plus opt-in Vault SSH signing with ephemeral, expiry-checked user certificate leases. **Not implemented:** externally verified production workload federation, complete OIDC authorization flow, production TLS ingress deployment and independent tamper-evident audit; optional online JWKS and RFC 9728 protected-resource metadata test slices now exist. An experimental AppRole/JWT workload identity with serialized renewal is implemented; FR-032/033 separately exercise proactive idle renewal and operator-gated recovery. Real Vault 2.2.1 dev-server signing has passed an isolated CI gate. **No M4 completion claim** is made. See [M4 implementation plan](M4_IMPLEMENTATION_PLAN.md) and [ADR-0012](adr/0012-m4-remote-identity-and-credential-providers.md).
 
 ## M4 in-progress security evidence
 
@@ -146,7 +146,7 @@ The issuer-neutral Vault JWT implementation plus Rust unit tests, documentation,
 - [Single-node K3s deployment smoke 42500336080](https://github.com/msmith741/HostMarshal/actions/runs/42500336080): **PASS**.
 - [Three-node K3s CNI isolation 42500335981](https://github.com/msmith741/HostMarshal/actions/runs/42500335981): **PASS** including deliberate unsafe-policy re-opening and restored denial.
 
-These checks exercise disposable fixtures only. No named private cluster, home domain, production Vault installation or issuer token was contacted. The implementation is **tested experimental**, not production certification. Release review and proactive idle renewal/recovery, CA rotation and production issuer provisioning remain open.
+These checks exercise disposable fixtures only. No named private cluster, home domain, production Vault installation or issuer token was contacted. The implementation is **tested experimental**, not production certification. Release review, deployment-specific recovery controls, CA rotation, independently durable background audit and production issuer provisioning remain open; FR-032/033 introduce experimental proactive renewal and explicit recovery.
 
 ## FR-032/FR-033: proactive Vault signing lease lifecycle (draft PR #12)
 

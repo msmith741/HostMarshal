@@ -69,9 +69,9 @@ Never copy a signing **private** key into Vault's JWT verification config or Hos
 
 ## Lifecycle and failure modes
 
-At the **first authorized** observation HostMarshal reads the signed JWT, submits it only to the fixed Vault JWT login endpoint, validates Vault's returned bounded renewable token and stores only the Vault token in memory. It uses `auth/token/renew-self` when the remaining lifetime is below `renewBeforeSeconds`. The source JWT is re-read for a new cold login after an authorized process restart, which also accommodates an atomic token projection update. It is not read for every signing operation and is **never** treated as a backup for an already-invalidated Vault token. A failed login, invalid response, unexpected token policy, revoked renewal privilege, expired session or signer HTTP 401/403 **quarantines** the authentication source until trusted restart.
+At the **first authorized** observation HostMarshal reads the signed JWT, submits it only to the fixed Vault JWT login endpoint, validates Vault's returned bounded renewable token and stores only the Vault token in memory. The provider then runs bounded proactive renew-self in process, serialized with foreground requests. The source JWT is re-read only for a **fresh** login following trusted restart or a separately authorized new recovery epoch. It is never read for every signing operation or used as a backup for an already-invalidated token. A failed login, invalid response, unexpected policy, revoked renewal privilege, expired session or signing HTTP 401/403 **quarantines** the source; without an administrator-controlled recovery marker, restart remains necessary.
 
-**Not implemented:** proactive idle token renewal, silent self-healing, automatic CA rotation, real production issuer enrollment or recovery. Idle periods longer than the Vault lease may require restart. If a token expires or Vault becomes unavailable, access denies; no static fallback is attempted. Secret values are never included in MCP results or audit logs.
+**Still not implemented:** silent self-healing, automatic CA rotation, real production issuer enrollment or provider-independent audit of background renewals. If a token expires or Vault becomes unavailable, access denies without static fallback. Secret values must never enter MCP results or audit logs.
 
 ## Verification and release gate
 
