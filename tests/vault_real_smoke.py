@@ -414,6 +414,25 @@ def main():
             observe_proactive(False)
             advance_recovery_epoch(102)
             observe_proactive(True)
+            app_events = [json.loads(line) for line in app_audit.read_text().splitlines()]
+            renewals = [event for event in app_events
+                        if event.get("operation") == "vault.signing-lease.renew/v1"]
+            recoveries = [event for event in app_events
+                          if event.get("operation") == "vault.signing-lease.recovery/v1"]
+            assert any(event["phase"] == "authorized" for event in renewals)
+            assert any(event["phase"] == "succeeded" for event in renewals)
+            assert any(event["phase"] == "failed" for event in renewals)
+            assert any(event["phase"] == "succeeded" for event in recoveries)
+            for event in renewals + recoveries:
+                assert event["issuer"] == "<system>" and event["subject"] == "<system>"
+                assert event["target"] == "<provider>"
+                assert event["snapshotDigest"] == "<maintenance>"
+                assert event["reason"] in {
+                    "renew_started", "renew_succeeded", "renew_failed",
+                    "recovery_started", "recovery_succeeded", "recovery_failed",
+                }
+            for token in (root_token, restricted, replacement, role_id, secret_id):
+                assert token not in app_audit.read_text(), "credential leaked in maintenance audit"
             process.stdin.close()
             process.wait(timeout=6)
             process = None
@@ -531,6 +550,15 @@ def main():
             observe_jwt(False)  # cannot silently re-login with JWT
             advance_recovery_epoch(103)
             observe_jwt(True)        # fresh JWT signature/role policy validated
+            jwt_events = [json.loads(line) for line in jwt_audit.read_text().splitlines()]
+            assert any(event.get("operation") == "vault.signing-lease.renew/v1"
+                       and event.get("phase") == "failed" for event in jwt_events)
+            assert any(event.get("operation") == "vault.signing-lease.recovery/v1"
+                       and event.get("phase") == "succeeded" for event in jwt_events)
+            for event in jwt_events:
+                if event.get("operation", "").startswith("vault.signing-lease."):
+                    assert event["issuer"] == "<system>"
+                    assert event["subject"] == "<system>"
             process.stdin.close()
             process.wait(timeout=6)
             process = None
