@@ -260,7 +260,9 @@ impl VaultSshCertificateBroker {
                 "valid_principals": binding.principal,
                 "cert_type": "user",
                 "ttl": format!("{}s", self.ttl_seconds),
-                "key_id": format!("hostmarshal-{}", scope.target()),
+                // Vault roles should keep allow_user_key_ids=false. The
+                // certificate key ID is the server-defined token identity
+                // or trusted role key_id_format, never caller-controlled.
                 "extensions": {}
             }))
             .send()

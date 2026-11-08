@@ -116,6 +116,8 @@ def main():
                 "ttl": "90s",
                 "max_ttl": "90s",
                 "not_before_duration": "10s",
+                "allow_user_key_ids": False,
+                "key_id_format": "hostmarshal-{{public_key_hash}}",
             }, root_token)
             policy = 'path "ssh/sign/read-only" { capabilities = ["create", "update"] }'
             api("PUT", "sys/policies/acl/hostmarshal-sign-only",
@@ -140,7 +142,6 @@ def main():
                 "valid_principals": USER,
                 "cert_type": "user",
                 "ttl": "90s",
-                "key_id": "hostmarshal-" + TARGET,
                 "extensions": {},
             }, restricted)["data"]["signed_key"]
             probe_cert = root / "probe_key-cert.pub"

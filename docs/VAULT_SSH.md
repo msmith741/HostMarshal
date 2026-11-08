@@ -32,7 +32,7 @@ The protected signer configuration is a separate **0600** JSON file outside the 
 
 The target must exist in the administrator-controlled Host inventory and its `spec.ssh.user` must equal the configured principal. The signed role/path and CA are **not** supplied by MCP. Role and mount are validated as individual path segments; client-controlled Vault URLs or commands are not exposed.
 
-The Vault role should permit *user certificate signing* only, allow only the minimum-privilege remote account, cap TTL, and deny privileged extensions/critical options. Configure sshd with the verified trusted user CA via `TrustedUserCAKeys` **and** keep its SSH host-key pin separate in `Host.spec.ssh.knownHostsFile`. Grant only the required `POST /v1/ssh/sign/observer` capability to the Vault token's policy. The process owner, token file, trust files, parent directories and network egress must be protected independently.
+The Vault role should permit *user certificate signing* only, allow only the minimum-privilege remote account, cap TTL, and deny privileged extensions/critical options. Keep `allow_user_key_ids=false`: HostMarshal deliberately omits the `key_id` request field so the role retains control of certificate audit identity. A server-owned `key_id_format` may include `{{public_key_hash}}` and role/token fields; do not permit MCP callers or issued tokens to choose arbitrary certificate audit identifiers. Configure sshd with the verified trusted user CA via `TrustedUserCAKeys` **and** keep its SSH host-key pin separate in `Host.spec.ssh.knownHostsFile`. Grant only the required `POST /v1/ssh/sign/observer` capability to the Vault token's policy. The process owner, token file, trust files, parent directories and network egress must be protected independently.
 
 ```sh
 hostmarshal config validate /etc/hostmarshal/config
@@ -48,7 +48,7 @@ The experimental JWT-authenticated loopback HTTP mode also permits this launcher
 
 - **Token rotation:** the protected token file is rechecked and read per signing request, allowing an operator-controlled rotation. The current pre-alpha provider does **not** implement Vault AppRole/Kubernetes workload login, token renewal or automated token revocation.
 - **Signing CA/TLS CA rotation:** stage verified CA files with trusted parents and restart HostMarshal; coordinate the SSH CA rotation with target `TrustedUserCAKeys`. Never learn new CAs from untrusted responses or disable TLS.
-- **Failure:** wrong certificate signature, CA, key, principal, type, options or TTL; HTTP redirect, outage or malformed response; or insufficient remaining validity all fail closed with non-disclosing errors. There is no broad fallback.
+- **Failure:** wrong certificate signature, CA, key, principal, type, options or TTL; HTTP redirect, outage or malformed response; or insufficient remaining validity all fail closed with non-disclosing errors. The real Vault role defaults to rejecting user-supplied `key_id`; issuance uses the role-controlled key ID and does not widen this permission. There is no broad fallback.
 - **Revocation:** emergency lockdown prevents new observations, but cannot revoke an already-accepted certificate or cancel work already accepted by sshd. Restrict TTL and manage target CA revocation separately.
 - **Threat boundaries:** same-service-user file replacement, compromised process/Vault token, malicious DNS, unprotected egress and lack of tamper-evident remote audit remain outside the current enforcement guarantees.
 
