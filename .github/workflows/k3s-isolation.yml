@@ -14,6 +14,8 @@ on:
       - 'tests/k3s_cluster_ci.py'
       - '.github/workflows/k3s-isolation.yml'
   workflow_dispatch:
+  schedule:
+    - cron: '7 6 * * 0' # weekly network-isolation acceptance independent of PR smoke
 
 permissions:
   contents: read
