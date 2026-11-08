@@ -900,6 +900,67 @@ mod tests {
         assert!(matches!(result, Err(BrokerFailure::Unavailable)));
     }
 
+    struct FailTerminalAudit;
+    impl AuditSink for FailTerminalAudit {
+        fn record(&self, event: &AuditEvent) -> std::io::Result<()> {
+            if event.phase == AuditPhase::Succeeded {
+                Err(std::io::Error::other("injected terminal write failure"))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn successful_vault_renewal_with_failed_terminal_audit_quarantines() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // Disposable HTTP fixture tests only the state/audit path. Actual
+        // Vault client construction enforces pinned HTTPS in integration CI.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buf = [0_u8; 4096];
+            assert!(stream.read(&mut buf).await.unwrap() > 0);
+            let json = r#"{"auth":{"client_token":"opaque","renewable":true,"lease_duration":30,"policies":["sign-only"],"token_policies":["sign-only"],"identity_policies":[]}}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{json}",
+                json.len()
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        });
+        let now = Instant::now();
+        let lifecycle = Arc::new(LeaseLifecycle {
+            state: Arc::new(Mutex::new(State::Active(Active {
+                token: Zeroizing::new("opaque".to_owned()),
+                expires: now + Duration::from_secs(30),
+                maintain_at: now - Duration::from_secs(1),
+            }))),
+            policy: "sign-only".to_owned(),
+            renew_url: Url::parse(&format!(
+                "http://{addr}/v1/auth/token/renew-self"
+            ))
+            .unwrap(),
+            renew_before: Duration::from_secs(15),
+            recovery_epoch_file: None,
+            audit: Arc::new(FailTerminalAudit),
+            audit_sequence: AtomicU64::new(0),
+            worker: StdMutex::new(None),
+        });
+        let result = lifecycle
+            .acquire(&Client::new(), async { Err(BrokerFailure::Denied) })
+            .await;
+        assert!(matches!(result, Err(BrokerFailure::Unavailable)));
+        assert!(matches!(
+            *lifecycle.state.lock().await,
+            State::Quarantined(None)
+        ));
+        server.await.unwrap();
+    }
+
     #[test]
     fn maintenance_audit_fields_are_fixed_redacted_and_correlated() {
         let sink = Arc::new(RecordingAudit::default());
