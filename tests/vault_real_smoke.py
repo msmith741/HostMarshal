@@ -325,6 +325,161 @@ def main():
             process.wait(timeout=6)
             process = None
 
+            # JWT workload authentication is provider-neutral: the signed
+            # assertion can be delivered by any operator-trusted workload
+            # identity issuer. Vault validates signature, exact issuer,
+            # audience and subject before minting signing-only Vault tokens.
+            # Real Vault's JWT auth plugin is exercised, NOT a mocked API.
+            import base64
+
+            api("POST", "sys/auth/jwt", {"type": "jwt"}, root_token)
+            jwt_key = root / "workload-signing.pem"
+            jwt_pub = root / "workload-signing.pub.pem"
+            subprocess.run([
+                "openssl", "genpkey", "-algorithm", "RSA",
+                "-pkeyopt", "rsa_keygen_bits:2048", "-out", str(jwt_key)
+            ], check=True, capture_output=True, timeout=15)
+            subprocess.run([
+                "openssl", "pkey", "-in", str(jwt_key), "-pubout",
+                "-out", str(jwt_pub)
+            ], check=True, capture_output=True, timeout=10)
+            jwt_issuer = "https://issuer.example.invalid/"
+            jwt_audience = "https://vault.example.invalid/workload"
+            api("POST", "auth/jwt/config", {
+                "jwt_validation_pubkeys": [jwt_pub.read_text()],
+                "jwt_supported_algs": ["RS256"],
+                "bound_issuer": jwt_issuer,
+            }, root_token)
+            api("POST", "auth/jwt/role/read-only-workload", {
+                "role_type": "jwt",
+                "user_claim": "sub",
+                "bound_subject": "workload-observer",
+                "bound_audiences": [jwt_audience],
+                "token_no_default_policy": True,
+                "token_policies": ["hostmarshal-sign-only"],
+                "token_type": "service",
+                "token_ttl": "90s",
+                "token_max_ttl": "6m",
+            }, root_token)
+
+            def workload_token(subject="workload-observer", audience=jwt_audience,
+                               issuer=jwt_issuer):
+                def b64(value):
+                    return base64.urlsafe_b64encode(value).decode().rstrip("=")
+                now = int(time.time())
+                h = b64(json.dumps({"alg": "RS256", "typ": "JWT"},
+                                   separators=(",", ":")).encode())
+                payload = b64(json.dumps({
+                    "iss": issuer, "sub": subject, "aud": audience,
+                    "iat": now, "nbf": now - 2, "exp": now + 240,
+                }, separators=(",", ":")).encode())
+                signed = (h + "." + payload).encode()
+                result = subprocess.run([
+                    "openssl", "dgst", "-sha256", "-sign", str(jwt_key)
+                ], input=signed, capture_output=True, check=True, timeout=10)
+                return signed.decode() + "." + b64(result.stdout)
+
+            workload_file = root / "workload.jwt"
+            workload_file.write_text(workload_token())
+            workload_file.chmod(0o600)
+            jwt_config = json.loads(signer_config.read_text())
+            jwt_config.pop("tokenFile")
+            jwt_config["jwtAuth"] = {
+                "authMount": "jwt",
+                "role": "read-only-workload",
+                "jwtFile": str(workload_file),
+                "expectedPolicy": "hostmarshal-sign-only",
+                "renewBeforeSeconds": 120,
+            }
+            config_jwt = root / "vault-jwt.json"
+            config_jwt.write_text(json.dumps(jwt_config))
+            config_jwt.chmod(0o600)
+
+            # All authentication sources are exclusive, not fallback chains.
+            ambiguous_jwt = dict(jwt_config)
+            ambiguous_jwt["appRole"] = app_cfg["appRole"]
+            invalid_jwt = root / "invalid-mixed-jwt.json"
+            invalid_jwt.write_text(json.dumps(ambiguous_jwt))
+            invalid_jwt.chmod(0o600)
+            reject = subprocess.run([
+                str(BIN), "--config-dir", str(config),
+                "--principal", "example-operator",
+                "--vault-ssh-config", str(invalid_jwt),
+            ], capture_output=True, text=True, timeout=8)
+            assert reject.returncode != 0 and "exactly one" in reject.stderr
+
+            jwt_audit = root / "jwt-audit.jsonl"
+            process = subprocess.Popen([
+                str(BIN), "--config-dir", str(config),
+                "--principal", "example-operator",
+                "--vault-ssh-config", str(config_jwt),
+                "--audit-log", str(jwt_audit),
+            ], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, bufsize=1, env=environment)
+            jwt_client = MCP(process)
+
+            def observe_jwt(succeed):
+                result = jwt_client.tool("linux.uname", TARGET)
+                assert (result.get("isError") is not True) == succeed, result
+                if succeed:
+                    assert result["structuredContent"] == {"id": TARGET, "os": "Linux"}
+                assert not list(ephemeral.iterdir())
+
+            observe_jwt(True)   # genuine Vault JWT authentication
+            observe_jwt(True)   # forced, policy-constrained renew-self
+            api("PUT", "sys/policies/acl/hostmarshal-sign-only",
+                {"policy": policy}, root_token)
+            observe_jwt(False)  # renewal revoked => sticky quarantine
+            api("PUT", "sys/policies/acl/hostmarshal-sign-only",
+                {"policy": renewable_policy}, root_token)
+            observe_jwt(False)  # cannot silently re-login with JWT
+            process.stdin.close()
+            process.wait(timeout=6)
+            process = None
+
+            # Wrong subject, audience and signature are rejected by *real*
+            # Vault JWT role validation. Each test uses an independent cold
+            # session. A failure stays quarantined after valid JWT replacement.
+            for forged in (
+                workload_token(subject="other-workload"),
+                workload_token(audience="https://untrusted.example.invalid/workload"),
+                workload_token(issuer="https://untrusted.example.invalid/"),
+            ):
+                workload_file.write_text(forged)
+                negative = subprocess.Popen([
+                    str(BIN), "--config-dir", str(config),
+                    "--principal", "example-operator",
+                    "--vault-ssh-config", str(config_jwt),
+                ], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE, text=True, bufsize=1, env=environment)
+                try:
+                    denial = MCP(negative).tool("linux.uname", TARGET)
+                    assert denial.get("isError") is True, denial
+                    workload_file.write_text(workload_token())
+                    sticky = MCP(negative).tool("linux.uname", TARGET)
+                    assert sticky.get("isError") is True, sticky
+                finally:
+                    negative.stdin.close()
+                    negative.wait(timeout=6)
+
+            # A rotated valid JWT is read at the next fresh workload login.
+            workload_file.write_text(workload_token())
+            process = subprocess.Popen([
+                str(BIN), "--config-dir", str(config),
+                "--principal", "example-operator",
+                "--vault-ssh-config", str(config_jwt),
+            ], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, bufsize=1, env=environment)
+            jwt_client = MCP(process)
+            observe_jwt(True)
+            process.stdin.close()
+            process.wait(timeout=6)
+            process = None
+            jwt_audit_text = jwt_audit.read_text()
+            for value in (workload_file.read_text(), root_token, restricted,
+                          role_id, secret_id, jwt_key.read_text()):
+                assert value not in jwt_audit_text, "JWT/Vault credentials leaked"
+
             # Preserve the independent real-Vault outage check using a live
             # session, not the token-file MCP client closed before AppRole.
             process = subprocess.Popen([
