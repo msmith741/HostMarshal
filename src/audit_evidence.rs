@@ -95,7 +95,9 @@ fn verify_reader<R: BufRead>(mut reader: R) -> io::Result<EvidenceCheckpoint> {
         if record.api_version != FORMAT {
             return Err(bad("unsupported audit evidence record version"));
         }
-        let expected_seq = sequence.checked_add(1).ok_or_else(|| bad("sequence overflow"))?;
+        let expected_seq = sequence
+            .checked_add(1)
+            .ok_or_else(|| bad("sequence overflow"))?;
         if record.sequence != expected_seq || record.previous != hex(&previous) {
             return Err(bad("audit evidence sequence or predecessor mismatch"));
         }
@@ -127,10 +129,14 @@ pub fn verify(path: &Path, expected_head: Option<&str>) -> io::Result<EvidenceCh
     let checkpoint = verify_reader(BufReader::new(file))?;
     if let Some(expected) = expected_head {
         if expected.len() != 64
-            || !expected.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+            || !expected
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
             || checkpoint.head != expected
         {
-            return Err(bad("audit evidence does not match trusted external checkpoint"));
+            return Err(bad(
+                "audit evidence does not match trusted external checkpoint",
+            ));
         }
     }
     Ok(checkpoint)
@@ -219,7 +225,11 @@ impl AuditSink for EvidenceFileAudit {
         data.push(b'\n');
         // A failed write or sync may leave a partial line. Never continue on
         // the current handle; require operator investigation and fresh verify.
-        if let Err(error) = writer.file.write_all(&data).and_then(|_| writer.file.sync_data()) {
+        if let Err(error) = writer
+            .file
+            .write_all(&data)
+            .and_then(|_| writer.file.sync_data())
+        {
             writer.healthy = false;
             return Err(error);
         }
@@ -278,7 +288,9 @@ mod tests {
         drop(a);
         let original = fs::read(&file).unwrap();
         let checkpoint = verify(&file, None).unwrap();
-        let modified = String::from_utf8(original.clone()).unwrap().replace("one", "two");
+        let modified = String::from_utf8(original.clone())
+            .unwrap()
+            .replace("one", "two");
         fs::write(&file, modified).unwrap();
         assert!(verify(&file, None).is_err());
         fs::write(&file, &original).unwrap();
@@ -309,7 +321,7 @@ mod tests {
         fs::write(&path, original).unwrap();
         #[cfg(unix)]
         {
-            use std::os::unix::fs::{symlink, PermissionsExt};
+            use std::os::unix::fs::{PermissionsExt, symlink};
             fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
             assert!(EvidenceFileAudit::open(&path).is_err());
             fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
