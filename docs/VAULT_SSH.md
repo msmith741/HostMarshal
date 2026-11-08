@@ -30,6 +30,34 @@ The protected signer configuration is a separate **0600** JSON file outside the 
 }
 ```
 
+### Optional AppRole workload authentication (FR-022, experimental)
+
+The existing `tokenFile` mode is retained for trusted operator-rotated tokens. For a machine workload, **omit `tokenFile`** and supply an explicit `appRole` object instead; configuring both or neither is rejected.
+
+```json
+{
+  "apiVersion": "hostmarshal.io/vault-ssh/v1alpha1",
+  "vaultAddress": "https://vault.example.invalid:8200",
+  "appRole": {
+    "authMount": "approle",
+    "roleIdFile": "/run/hostmarshal/approle-role-id",
+    "secretIdFile": "/run/hostmarshal/approle-secret-id",
+    "expectedPolicy": "hostmarshal-sign-only",
+    "renewBeforeSeconds": 120
+  },
+  "caCertificateFile": "/etc/hostmarshal/trust/vault-tls-ca.pem",
+  "sshCaPublicKeyFile": "/etc/hostmarshal/trust/vault-ssh-ca.pub",
+  "mount": "ssh",
+  "role": "observer",
+  "ttlSeconds": 90,
+  "targets": [{"target": "example-linux", "principal": "observer"}]
+}
+```
+
+Provision the RoleID and SecretID independently as separate protected, absolute-path regular files with mode `0600` and trusted parent directories. The AppRole auth mount and expected policy are fixed at process startup. The Vault AppRole must have `bind_secret_id=true`, `token_no_default_policy=true`, a narrowly scoped **renewable service token** (30–3600 seconds), and one signing-only policy granting `ssh/sign/observer` and `auth/token/renew-self`. Do **not** grant general token creation, token lookup of other identities, role administration, secret enumeration, or root privileges. Treat both RoleID and SecretID as credentials; Vault's response and login material are never returned through MCP.
+
+At first permitted SSH observation, HostMarshal logs in with AppRole over its pinned HTTPS client and validates the issued token's policy, renewable flag, and TTL. On later calls, if the remaining lifetime is below `renewBeforeSeconds`, it serializes `auth/token/renew-self` before signing. Failure, expiry, revoked signing authorization, unexpectedly broad token policy, or an invalid renewal response **quarantines that session**. Further requests fail closed until an authorized operator fixes the cause and restarts HostMarshal. A SecretID cannot silently re-login after token revocation. This is **on-demand renewal**, not an always-on Vault Agent: long idle periods exceeding token TTL require restart, and app credentials are not automatically reloaded. The operator-managed `tokenFile` mode may still rotate its file per request.
+
 The target must exist in the administrator-controlled Host inventory and its `spec.ssh.user` must equal the configured principal. The signed role/path and CA are **not** supplied by MCP. Role and mount are validated as individual path segments; client-controlled Vault URLs or commands are not exposed.
 
 To generate an Ed25519 CA in Vault (administrator setup, illustrative only), use `vault write ssh/config/ca generate_signing_key=true key_type=ed25519` after mounting the SSH secrets engine. Retrieve the public key over a trusted administrative channel and independently verify its fingerprint before installing it in the HostMarshal trust path. Do not store CA private keys in HostMarshal or the repository. RSA is Vault's default generated SSH CA key type and is intentionally unsupported by this pre-alpha verifier.
@@ -48,7 +76,7 @@ The experimental JWT-authenticated loopback HTTP mode also permits this launcher
 
 ## Lifecycle, failures and outstanding gates
 
-- **Token rotation:** the protected token file is rechecked and read per signing request, allowing an operator-controlled rotation. The current pre-alpha provider does **not** implement Vault AppRole/Kubernetes workload login, token renewal or automated token revocation.
+- **Token rotation:** the operator token-file mode rechecks its protected file on each signing request. Optional AppRole mode reads protected RoleID/SecretID on first use, retains a short-lived restricted token in memory and renews **on demand** using `auth/token/renew-self` before signing. Failed renew/auth rejection or token expiry quarantines the session; reactivation requires a trusted restart and independently provisioned/rotated credentials. No proactive renewal, automatic refresh of AppRole files or Kubernetes auth is implemented.
 - **Signing CA/TLS CA rotation:** stage verified CA files with trusted parents and restart HostMarshal; coordinate the SSH CA rotation with target `TrustedUserCAKeys`. Never learn new CAs from untrusted responses or disable TLS.
 - **Failure:** wrong certificate signature, CA, key, principal, type, options or TTL; HTTP redirect, outage or malformed response; or insufficient remaining validity all fail closed with non-disclosing errors. The real Vault role defaults to rejecting user-supplied `key_id`; issuance uses the role-controlled key ID and does not widen this permission. There is no broad fallback.
 - **Revocation:** emergency lockdown prevents new observations, but cannot revoke an already-accepted certificate or cancel work already accepted by sshd. Restrict TTL and manage target CA revocation separately.
@@ -56,4 +84,4 @@ The experimental JWT-authenticated loopback HTTP mode also permits this launcher
 
 `tests/vault_ssh_smoke.py` uses a **disposable Vault-API-compatible TLS signing fixture**, an actual Ed25519 OpenSSH user CA, and a real disposable SSH daemon. It checks authorized cert login, wrong signer/key/principals/expiry/options, provider errors, redirects, oversized/malformed responses, token changes, denied target input, mixed-provider rejection and temporary-file cleanup.
 
-**Real Vault dev-server interoperability has now been verified in CI**, using HashiCorp Vault 2.2.1 under TLS, an Ed25519 signing CA, a narrowly scoped Vault token, a genuine SSH daemon, token revocation/replacement, Vault outage, and ephemeral-key cleanup (`tests/vault_real_smoke.py`). The real-Vault job passed on retry after a transient CI SSH-account provisioning timeout. **This does not verify production Vault deployments, Kubernetes/AppRole workload authentication/renewal, CA rotation or independent security assurance**. ADR-0012 remains Proposed and M4 is incomplete. See [M4 plan](M4_IMPLEMENTATION_PLAN.md), [Traceability](TRACEABILITY.md), [Remote MCP](REMOTE_MCP.md), and [Security Architecture](SECURITY_ARCHITECTURE.md).
+**Real Vault dev-server interoperability has now been verified in CI**, using HashiCorp Vault 2.2.1 under TLS, an Ed25519 signing CA, a narrowly scoped Vault token, a genuine SSH daemon, token revocation/replacement, Vault outage, and ephemeral-key cleanup (`tests/vault_real_smoke.py`). The real-Vault job passed on retry after a transient CI SSH-account provisioning timeout. **The new AppRole login/on-demand renewal regression is currently being verified in CI. This does not verify production Vault deployments, Kubernetes-native auth, continuous background token renewal, CA rotation or independent security assurance**. ADR-0012 remains Proposed and M4 is incomplete. See [M4 plan](M4_IMPLEMENTATION_PLAN.md), [Traceability](TRACEABILITY.md), [Remote MCP](REMOTE_MCP.md), and [Security Architecture](SECURITY_ARCHITECTURE.md).

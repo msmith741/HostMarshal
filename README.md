@@ -4,7 +4,7 @@
 
 HostMarshal is a vendor-neutral, pre-alpha Rust infrastructure capability gateway. It supports MCP over stdio, versioned YAML capabilities, and a centralized audited execution coordinator for vetted inventory, Linux SSH and HTTPS observations.
 
-> **Pre-alpha.** M4 adds an optional loopback-only, JWT-authenticated Streamable HTTP MCP entrypoint. See [remote MCP security](docs/REMOTE_MCP.md). It is not a production-ready remote service. M3 adds fixed Linux `uname -s` over pinned-host-key SSH and a fixed HTTPS `/health` GET. There is **no** generic remote command, arbitrary URL, mutation, external plugin, complete remote OIDC federation, automatic token renewal or tamper-evident audit. JWT HTTP and short-lived Vault-compatible SSH certificate issuance are opt-in pre-alpha slices. Use a dedicated minimally privileged OS/SSH identity and trusted configuration.
+> **Pre-alpha.** M4 adds an optional loopback-only, JWT-authenticated Streamable HTTP MCP entrypoint. See [remote MCP security](docs/REMOTE_MCP.md). It is not a production-ready remote service. M3 adds fixed Linux `uname -s` over pinned-host-key SSH and a fixed HTTPS `/health` GET. There is **no** generic remote command, arbitrary URL, mutation, external plugin, complete remote OIDC federation, proactive background token renewal or tamper-evident audit. JWT HTTP and short-lived Vault-compatible SSH certificate issuance are opt-in pre-alpha slices. Use a dedicated minimally privileged OS/SSH identity and trusted configuration.
 
 ## Declarative M1 configuration + M2 execution runtime
 
@@ -55,7 +55,7 @@ See [Remote MCP deployment and threat model](docs/REMOTE_MCP.md) and [M4 accepta
 
 ## M4 Vault SSH signer (experimental)
 
-An optional Vault SSH certificate broker generates a fresh Ed25519 keypair **after** authorization and mandatory audit, verifies the returned short-lived user certificate against a pinned CA and exact target account, and deletes ephemeral material after each call. The provider never falls back to static keys. A real Vault 2.2.1 TLS dev-server with restricted signing token and actual SSH login now passes CI; production workload login/renewal and full M4 release gates remain outstanding. See [Vault SSH deployment and security](docs/VAULT_SSH.md).
+An optional Vault SSH certificate broker generates a fresh Ed25519 keypair **after** authorization and mandatory audit, verifies the returned short-lived user certificate against a pinned CA and exact target account, and deletes ephemeral material after each call. The provider never falls back to static keys. A real Vault 2.2.1 TLS dev-server with restricted signing token and actual SSH login now passes CI; an experimental protected-file AppRole login/on-demand token renewal mode is being verified; Kubernetes-native workload identity, continuous renewal and full M4 release gates remain outstanding. See [Vault SSH deployment and security](docs/VAULT_SSH.md).
 
 ## Parser fuzzing and MCP compatibility
 

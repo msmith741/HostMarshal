@@ -99,7 +99,7 @@ The new loopback-only HTTP MCP mode authenticates every request with a locally p
 
 The opt-in Vault broker uses a protected OS-owned signer config, fixed role/mount, verified TLS and SSH signing CAs, per-call Ed25519 keypairs, cryptographic certificate/principal/expiry validation, and lease-owned temporary files. The coordinator checks grants/audit before the broker and validity beyond the pending operation deadline. The static-key provider and Vault signer are **mutually exclusive**; a Vault outage never triggers static fallback. The SSH adapter retains host-key pinning and the fixed Linux observation.
 
-Current Vault token authentication is from an owner-only file reread on each request, not Kubernetes/AppRole workload login or automated renewal. A disposable real Vault 2.2.1 TLS signer and restricted token/SSH role are covered by CI. Trusted workload login/renewal, production CA rotation, tamper-evident audit, ingress TLS, and OS egress isolation are incomplete. See [Vault SSH](VAULT_SSH.md).
+Vault authentication may use an owner-only operator token file (reread for every request) or a separate protected-file AppRole identity. AppRole tokens are checked against a single expected policy and renewable TTL; renewal occurs on demand before use, while failed renewal/auth rejection places the session in a fail-closed quarantine. This does not implement Kubernetes federation, a background renewal agent or automatic recovery after expiration. A disposable real Vault 2.2.1 TLS signer and restricted token/SSH role are covered by CI. Trusted workload login/renewal, production CA rotation, tamper-evident audit, ingress TLS, and OS egress isolation are incomplete. See [Vault SSH](VAULT_SSH.md).
 
 ## Residual risks
 
