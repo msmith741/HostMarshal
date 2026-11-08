@@ -51,6 +51,7 @@ HostMarshal provides **typed, authorized, auditable infrastructure operations** 
 | FR-031 | Authenticate optional Vault SSH-signing workloads using an administrator-selected, externally issued JWT and Vault's role-bound JWT auth method; pin Vault TLS, require exclusive credential source and exact renewable lease policy, quarantine on failure, and do not expose or log tokens | M4 |
 | FR-032 | For an active renewable Vault AppRole or JWT signing lease, proactively renew in process before expiry after first authorized use, serialize with foreground operations, validate unchanged token and exact policy, and quarantine on failed renewal without retry/fallback | M4 |
 | FR-033 | Permit opt-in recovery from quarantined Vault AppRole/JWT signing lease only after a strictly increased administrator-controlled recovery epoch and fresh authenticated Vault login, preventing stale-token reuse, epoch rollback, or automatic recovery; otherwise require restart | M4 |
+| FR-034 | Audit every AppRole/JWT Vault token renewal and operator-gated recovery attempt with correlated, fixed, redacted precommit and terminal records through the launch-owned audit sink; reject credential use or recovery if a required audit commitment fails | M4 |
 
 ## Non-functional requirements
 
