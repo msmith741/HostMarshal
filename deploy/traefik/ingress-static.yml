@@ -1,0 +1,14 @@
+# Example CI entrypoints. No insecure HTTP or Traefik dashboard listener.
+entryPoints:
+  mcp:
+    address: ":8443"
+  oidc:
+    address: ":8444"
+providers:
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: false
+api:
+  insecure: false
+log:
+  level: WARN

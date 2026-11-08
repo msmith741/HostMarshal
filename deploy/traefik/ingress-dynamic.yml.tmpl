@@ -1,0 +1,47 @@
+# CI-only template: test runner substitutes per-job proof and certificate paths.
+# Do not check rendered files or the proof into source control.
+http:
+  routers:
+    hostmarshal-mcp:
+      entryPoints: [mcp]
+      rule: "Host(`mcp.example.invalid`) && (Path(`/mcp`) || Path(`/.well-known/oauth-protected-resource/mcp`))"
+      service: hostmarshal
+      middlewares: [hostmarshal-proof]
+      tls: {}
+    oidc:
+      entryPoints: [oidc]
+      rule: "Host(`auth.example.invalid`)"
+      service: keycloak
+      middlewares: [oidc-forward]
+      tls: {}
+  services:
+    hostmarshal:
+      loadBalancer:
+        # Force the administrator-configured private backend Host header;
+        # the public Host appears only in our proxy-owned attestation.
+        passHostHeader: false
+        servers:
+          - url: "http://127.0.0.1:8338"
+    keycloak:
+      loadBalancer:
+        servers:
+          - url: "http://hostmarshal-keycloak:8080"
+  middlewares:
+    hostmarshal-proof:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+          X-Forwarded-Host: "mcp.example.invalid"
+          X-HostMarshal-Ingress-Proof: "@@INGRESS_PROOF@@"
+    oidc-forward:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+          X-Forwarded-Port: "8444"
+          X-Forwarded-Host: "auth.example.invalid:8444"
+tls:
+  certificates:
+    - certFile: "@@MCP_TLS_CERT@@"
+      keyFile: "@@MCP_TLS_KEY@@"
+    - certFile: "@@OAUTH_TLS_CERT@@"
+      keyFile: "@@OAUTH_TLS_KEY@@"
