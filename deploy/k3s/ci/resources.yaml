@@ -56,6 +56,12 @@ spec:
               cp /identity/auth.json /runtime/auth.json
               cp /identity/ingress.proof /runtime/ingress.proof
               cp /trust/keys.json /runtime/keys.json
+              # Kubernetes ConfigMap projections are symlinks. HostMarshal
+              # intentionally accepts only regular YAML files in config dir.
+              for name in host.yaml capability.yaml grant.yaml; do
+                cat "/config-projected/$name" > "/config-regular/$name"
+                chmod 0444 "/config-regular/$name"
+              done
               chmod 0600 /runtime/auth.json /runtime/ingress.proof
               chmod 0644 /runtime/keys.json
               proof="$(cat /identity/ingress.proof)"
@@ -76,6 +82,11 @@ spec:
             - name: trust
               mountPath: /trust
               readOnly: true
+            - name: config-projected
+              mountPath: /config-projected
+              readOnly: true
+            - name: config-regular
+              mountPath: /config-regular
             - name: runtime
               mountPath: /runtime
             - name: nginx-template
@@ -113,7 +124,7 @@ spec:
               cpu: "1"
               memory: 512Mi
           volumeMounts:
-            - name: config
+            - name: config-regular
               mountPath: /config
               readOnly: true
             - name: runtime
@@ -156,9 +167,12 @@ spec:
         - name: trust
           configMap:
             name: hostmarshal-ci-jwks
-        - name: config
+        - name: config-projected
           configMap:
             name: hostmarshal-ci-config
+        - name: config-regular
+          emptyDir:
+            medium: Memory
         - name: nginx-template
           configMap:
             name: hostmarshal-ci-nginx

@@ -22,6 +22,18 @@ for container in [init, *pod["containers"]]:
     assert not ctx["capabilities"].get("add")
     assert ctx["readOnlyRootFilesystem"] is True
 assert pod["volumes"][0]["secret"]["defaultMode"] == 0o440
+volumes = {item["name"]: item for item in pod["volumes"]}
+assert volumes["config-projected"]["configMap"]["name"] == "hostmarshal-ci-config"
+assert volumes["config-regular"]["emptyDir"]["medium"] == "Memory"
+init_mounts = {item["name"]: item["mountPath"] for item in init["volumeMounts"]}
+assert init_mounts["config-projected"] == "/config-projected"
+assert init_mounts["config-regular"] == "/config-regular"
+backend = next(c for c in pod["containers"] if c["name"] == "hostmarshal")
+assert any(m["name"] == "config-regular" and m["mountPath"] == "/config"
+           and m["readOnly"] is True for m in backend["volumeMounts"])
+init_script = init["command"][-1]
+assert 'cat "/config-projected/$name" > "/config-regular/$name"' in init_script
+assert 'for name in host.yaml capability.yaml grant.yaml' in init_script
 assert by_kind["Service"]["spec"]["type"] == "ClusterIP"
 assert [p["port"] for p in by_kind["Service"]["spec"]["ports"]] == [8080]
 policy = by_kind["NetworkPolicy"]["spec"]
