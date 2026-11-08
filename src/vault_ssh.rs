@@ -175,6 +175,9 @@ impl VaultSshCertificateBroker {
         }
         let client = Client::builder()
             .https_only(true)
+            // Use ONLY the approved Vault TLS CA; platform/public roots are
+            // broader than the administrator's pinned signing endpoint.
+            .tls_built_in_root_certs(false)
             .redirect(reqwest::redirect::Policy::none())
             .no_proxy()
             .connect_timeout(Duration::from_secs(2))
@@ -246,7 +249,8 @@ impl VaultSshCertificateBroker {
         {
             return Err(BrokerFailure::Denied);
         }
-        let token_header = HeaderValue::from_str(token).map_err(|_| BrokerFailure::Denied)?;
+        let mut token_header = HeaderValue::from_str(token).map_err(|_| BrokerFailure::Denied)?;
+        token_header.set_sensitive(true);
         let response = self
             .client
             .post(self.signing_url.clone())

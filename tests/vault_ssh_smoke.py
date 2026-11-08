@@ -323,6 +323,36 @@ def run():
             assert rejected.returncode != 0
             assert "no fallback" in rejected.stderr
 
+            # A valid but unrelated TLS CA must NOT establish Vault identity.
+            other_tls_key = root / "unrelated-tls.key"
+            other_tls_ca = root / "unrelated-tls.pem"
+            command(
+                "openssl", "req", "-x509", "-newkey", "rsa:2048",
+                "-noenc", "-days", "1", "-subj", "/CN=Unrelated Vault CA",
+                "-addext", "basicConstraints=critical,CA:TRUE",
+                "-addext", "keyUsage=critical,keyCertSign,cRLSign",
+                "-keyout", str(other_tls_key), "-out", str(other_tls_ca),
+            )
+            cfg_tls = json.loads(signer_config.read_text())
+            cfg_tls["caCertificateFile"] = str(other_tls_ca)
+            signer_config.write_text(json.dumps(cfg_tls))
+            bad_tls = subprocess.Popen(
+                argv, env=environment,
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, bufsize=1,
+            )
+            try:
+                client = MCP(bad_tls)
+                before = VaultSigner.calls
+                result = client.tool("linux.uname", TARGET)
+                assert result.get("isError") is True, result
+                assert VaultSigner.calls == before, "untrusted Vault TLS handshake reached signer"
+            finally:
+                bad_tls.stdin.close()
+                bad_tls.wait(timeout=5)
+            cfg_tls["caCertificateFile"] = str(tls_ca)
+            signer_config.write_text(json.dumps(cfg_tls))
+
             # A changed inventory principal cannot be reinterpreted as an
             # already-authorized Vault target binding.
             cfg = json.loads(signer_config.read_text())
