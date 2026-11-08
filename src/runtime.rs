@@ -513,7 +513,10 @@ mod tests {
             Arc::new(BrokerSpy::new("unavailable")),
             audit.clone(),
         );
-        assert_eq!(runner.audit_http_denial(HttpRejection::MissingBearer, None), Ok(()));
+        assert_eq!(
+            runner.audit_http_denial(HttpRejection::MissingBearer, None),
+            Ok(())
+        );
         let verified = caller("operator-a");
         assert_eq!(
             runner.audit_http_denial(HttpRejection::Protocol, Some(&verified)),

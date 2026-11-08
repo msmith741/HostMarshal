@@ -24,7 +24,9 @@ use rmcp::{
 use tower_http::limit::RequestBodyLimitLayer;
 
 use crate::{
-    dynamic_mcp::DeclarativeMcp, identity::AuthenticatedCaller, remote_auth::RemoteJwtVerifier,
+    dynamic_mcp::DeclarativeMcp,
+    identity::AuthenticatedCaller,
+    remote_auth::RemoteJwtVerifier,
     runtime::{ExecutionCoordinator, HttpRejection},
 };
 
