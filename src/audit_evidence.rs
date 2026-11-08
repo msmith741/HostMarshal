@@ -127,17 +127,16 @@ pub fn verify(path: &Path, expected_head: Option<&str>) -> io::Result<EvidenceCh
     check_existing(path)?;
     let file = File::open(path)?;
     let checkpoint = verify_reader(BufReader::new(file))?;
-    if let Some(expected) = expected_head {
-        if expected.len() != 64
+    if let Some(expected) = expected_head
+        && (expected.len() != 64
             || !expected
                 .bytes()
                 .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
-            || checkpoint.head != expected
-        {
-            return Err(bad(
-                "audit evidence does not match trusted external checkpoint",
-            ));
-        }
+            || checkpoint.head != expected)
+    {
+        return Err(bad(
+            "audit evidence does not match trusted external checkpoint",
+        ));
     }
     Ok(checkpoint)
 }
