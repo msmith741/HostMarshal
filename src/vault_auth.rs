@@ -391,6 +391,14 @@ impl LeaseLifecycle {
         })
     }
 
+    fn refresh_quarantine(&self, state: &mut State) {
+        let baseline = match state {
+            State::Quarantined(previous) => *previous,
+            _ => None,
+        };
+        *state = self.quarantined_after_failure(baseline);
+    }
+
     async fn acquire<F>(
         self: &Arc<Self>,
         client: &Client,
@@ -405,7 +413,7 @@ impl LeaseLifecycle {
             State::Cold => match login.await {
                 Ok(active) => active,
                 Err(error) => {
-                    *state = self.quarantined_after_failure(None);
+                    self.refresh_quarantine(&mut state);
                     return Err(error);
                 }
             },
@@ -423,14 +431,14 @@ impl LeaseLifecycle {
                 match login.await {
                     Ok(active) => active,
                     Err(error) => {
-                        *state = self.quarantined_after_failure(current);
+                        self.refresh_quarantine(&mut state);
                         return Err(error);
                     }
                 }
             }
             State::Active(active) => {
                 if active.expires <= Instant::now() {
-                    *state = self.quarantined_after_failure(None);
+                    self.refresh_quarantine(&mut state);
                     return Err(BrokerFailure::Denied);
                 }
                 // Apply the same minimum one-third-TTL spacing to foreground
@@ -448,7 +456,7 @@ impl LeaseLifecycle {
                     {
                         Ok(renewed) => renewed,
                         Err(error) => {
-                            *state = self.quarantined_after_failure(None);
+                            self.refresh_quarantine(&mut state);
                             return Err(error);
                         }
                     }
@@ -491,7 +499,7 @@ impl LeaseLifecycle {
                 let old = std::mem::replace(&mut *state, owner.quarantined());
                 let active = match old {
                     State::Active(active) if active.expires <= Instant::now() => {
-                        *state = owner.quarantined_after_failure(None);
+                        owner.refresh_quarantine(&mut state);
                         return;
                     }
                     State::Active(active) if active.maintain_at <= Instant::now() => {
@@ -506,7 +514,7 @@ impl LeaseLifecycle {
                         {
                             Ok(renewed) => renewed,
                             Err(_) => {
-                                *state = owner.quarantined_after_failure(None);
+                                owner.refresh_quarantine(&mut state);
                                 return; // sticky quarantine, no retry
                             }
                         }
