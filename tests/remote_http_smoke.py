@@ -184,10 +184,15 @@ def run():
                 status, _ = rpc(port, valid, "tools/list", extra_headers=headers)
                 assert status == expected, (headers, status)
             status, data = rpc(
-                port, valid, "tools/list",
+                port, token("operator-b"), "tools/list",
                 extra_headers={"X-Forwarded-User": "operator-a"},
             )
-            assert status == 200, (status, data)
+            assert status == 200 and data["result"]["tools"] == [], (status, data)
+            status, _ = rpc(
+                port, None, "tools/list",
+                extra_headers={"X-Forwarded-User": "operator-a"},
+            )
+            assert status == 401
 
             # The caller cannot select an arbitrary URL, command, or target.
             status, data = rpc(port, valid, "tools/call", {

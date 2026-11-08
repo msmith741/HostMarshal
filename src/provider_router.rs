@@ -19,8 +19,8 @@ impl ProviderRoute {
             !operation.is_empty() && !target.is_empty() && !purpose.is_empty(),
             "credential provider route fields cannot be empty"
         );
-        for field in [operation, target, purpose] {
-            let allowed_slash = field == operation;
+        for (index, field) in [operation, target, purpose].iter().enumerate() {
+            let allowed_slash = index == 0;
             ensure!(
                 field.len() <= 128
                     && field.bytes().all(|b| {

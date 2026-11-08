@@ -50,7 +50,7 @@ impl AuthenticatedCaller {
     }
 
     pub fn issuer(&self) -> &str {
-        self.issuer
+        &self.issuer
     }
 
     pub fn subject(&self) -> &str {
