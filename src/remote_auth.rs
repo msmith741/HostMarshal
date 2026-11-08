@@ -44,6 +44,8 @@ struct RsaPublicKey {
     alg: String,
     #[serde(rename = "use")]
     key_use: String,
+    #[serde(default)]
+    key_ops: Option<Vec<String>>,
     n: String,
     e: String,
 }
@@ -113,6 +115,12 @@ impl RemoteJwtVerifier {
             ensure!(
                 jwk.kty == "RSA" && jwk.alg == "RS256" && jwk.key_use == "sig",
                 "only RSA RS256 signing keys are accepted"
+            );
+            ensure!(
+                jwk.key_ops.as_ref().is_none_or(|operations| {
+                    operations.len() == 1 && operations[0] == "verify"
+                }),
+                "JWKS key operations must be verify-only"
             );
             ensure!(
                 !jwk.kid.is_empty()
