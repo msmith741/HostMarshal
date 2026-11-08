@@ -389,13 +389,19 @@ def test_authorization(key, ca):
     }
     code, _, body = external(ca, "POST", "/mcp", bearer=allowed, headers=forged)
     assert code == 200 and b"inventory.inspect" in body, (code, body)
-    try:
-        external(Path("/dev/null"), "GET",
-                 "/.well-known/oauth-protected-resource/mcp")
-    except ssl.SSLError:
-        pass
-    else:
-        raise AssertionError("untrusted TLS root did not deny client")
+    # Exercise a genuine, syntactically valid *untrusted* CA (not /dev/null,
+    # which would only prove that SSL rejects a malformed trust file).
+    with tempfile.TemporaryDirectory(prefix="hm-k3s-wrong-ca-") as temp:
+        wrong_ca, _, _ = generate_ca_and_leaf(
+            Path(temp) / "untrusted-root", MCP_HOST
+        )
+        try:
+            external(wrong_ca, "GET",
+                     "/.well-known/oauth-protected-resource/mcp")
+        except ssl.SSLError:
+            pass
+        else:
+            raise AssertionError("untrusted CA unexpectedly verified ingress TLS")
 
 
 def main():

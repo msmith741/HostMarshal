@@ -1,6 +1,10 @@
 # Disposable three-node K3s/Traefik security acceptance
 
-**Status:** CI-only proof of integration. Requires Docker on a disposable GitHub-hosted Ubuntu runner, not a kubeconfig to a private cluster.
+**Status:** two independent CI test levels, **not a production deployment**. Both run on disposable GitHub-hosted Linux runners without private homelab Kubernetes credentials.
+
+**Fast deployment smoke:** `.github/workflows/k3s-smoke.yml` creates one K3s server node, checks the manifest security contract, installs bundled Traefik and HostMarshal, then checks Pod readiness and authenticated/denied HTTPS MCP end to end. **Extended security acceptance:** `.github/workflows/k3s-isolation.yml` additionally creates two agents and tests Kubernetes NetworkPolicy and cross-node paths, including a deliberately unsafe additive-policy positive control and its rollback. The extended workflow is path-filtered for related changes on PR/push and independently dispatchable; it remains required before any production release.
+
+The init container uses Kubernetes `fsGroup: 10001` and a group-readable read-only Secret projection (0440) to copy protected auth/ingress files into a memory-backed volume as UID/GID 10001. Copies are mode 0600, owned by the non-root runtime identity. **No init/runtime container runs as root or adds capabilities.** The previous root + CHOWN/FOWNER workaround is retired.
 
 ## What runs
 
@@ -46,7 +50,7 @@ cargo build --locked --bin hostmarshal
 docker build -f deploy/k3s/ci/Dockerfile -t hostmarshal-k3s-ci:ci .
 k3d cluster create hostmarshal-m4-ci --image rancher/k3s:v1.34.5-k3s1 --servers 1 --agents 2 --wait --timeout 300s
 k3d image import hostmarshal-k3s-ci:ci --cluster hostmarshal-m4-ci
-python tests/k3s_cluster_ci.py
+python tests/k3s_cluster_ci.py --mode network
 k3d cluster delete hostmarshal-m4-ci
 ```
 
@@ -67,3 +71,19 @@ The *positive-control policy test* is essential: simply observing timeouts could
 ### Residual release gates
 
 CI validates actual Flannel/kube-router policy enforcement in a disposable Linux/Docker environment, not a homelab CNI dataplane. It does not prove real k3s Traefik chart configuration, MetalLB routes, UniFi security rules, node/VLAN interfaces, local-cluster RBAC, production Secret permissions and rotation, site-specific cross-namespace relays or IPv6. It does not exercise independent real Keycloak and Vault *inside* this particular K3s cluster; those are separate CI jobs. Cluster installation and active probes are authorized only within disposable CI; PRs in `homelab-gitops` remain draft/unmerged pending site review.
+
+### Fast single-node smoke procedure
+
+The source-manifest security contract is independently tested by `tests/k3s_manifest_contract.py` using pinned PyYAML. The first PR gate starts `hostmarshal-smoke` with only one K3s server (no agents), then runs:
+
+```sh
+HOSTMARSHAL_K3D_CLUSTER=hostmarshal-smoke \
+HOSTMARSHAL_K3D_BACKEND_NODE=k3d-hostmarshal-smoke-server-0 \
+python tests/k3s_cluster_ci.py --mode smoke
+```
+
+The second, separate, path-filtered two-agent job runs `--mode network` in `hostmarshal-m4-ci`. Both runners verify the **exact expected disposable k3d kube context** before any Kubernetes mutations; they refuse to run against an arbitrary context, including a homelab cluster. The smoke result is a deployment/authenticated-ingress result only, and never proves CNI isolation.
+
+### Strict loader and Kubernetes ConfigMaps
+
+Kubernetes ConfigMap volumes present projected keys through symlink paths (for atomic updates). HostMarshal's compiled-config loader intentionally accepts only **regular files**, not symlinks. The non-root init reads the three approved YAML filenames from a read-only `config-projected` volume and writes new regular files into the memory-backed `config-regular` volume. HostMarshal mounts only that latter volume, read-only, at `/config`. Never weaken the compiled-config file-type verification or pass the projection directly to HostMarshal. The independent manifest preflight asserts this staging contract.
