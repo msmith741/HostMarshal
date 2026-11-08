@@ -138,7 +138,13 @@ async fn main() -> Result<()> {
                 remaining = rest;
             }
             serve_remote_http(
-                address, directory, auth_file, audit_file, audit_delivery, ssh_map, vault_ssh,
+                address,
+                directory,
+                auth_file,
+                audit_file,
+                audit_delivery,
+                ssh_map,
+                vault_ssh,
             )
             .await
         }
