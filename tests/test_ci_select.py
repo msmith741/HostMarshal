@@ -36,9 +36,14 @@ class SelectionTests(unittest.TestCase):
         remote = selected.classify(["src/remote_auth.rs"])
         self.assertTrue(remote["core"] and remote["oauth"] and remote["k3s"])
         self.assertFalse(remote["vault"] or remote["fuzz"])
-        other = selected.classify(["src/adapter.rs"])
-        self.assertTrue(other["core"])
-        self.assertFalse(other["vault"] or other["k3s"])
+        shared = selected.classify(["src/adapter.rs", "src/identity.rs"])
+        self.assertTrue(all(shared[key] for key in ("core", "vault", "oauth", "k3s")))
+        self.assertFalse(shared["fuzz"] or shared["isolation"])
+        transport = selected.classify(["src/observation.rs"])
+        self.assertTrue(transport["core"] and transport["vault"])
+        self.assertFalse(transport["k3s"] or transport["oauth"])
+        for unknown in ("src/new-security-module.rs", "tests/new_integration.py"):
+            self.assertTrue(all(selected.classify([unknown]).values()))
 
 if __name__ == "__main__":
     unittest.main()
