@@ -102,8 +102,6 @@ impl OperationAdapter for LinuxUname {
                 .arg(&endpoint.user)
                 .arg("-p")
                 .arg(endpoint.port.to_string())
-                .arg(&host.address)
-                .arg("uname -s")
                 .stdin(Stdio::null())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
@@ -116,6 +114,9 @@ impl OperationAdapter for LinuxUname {
                     .arg("-o")
                     .arg(format!("CertificateFile={}", cert.display()));
             }
+            // SSH options must precede the destination: trailing -o arguments
+            // would otherwise be interpreted as remote command arguments.
+            command.arg(&host.address).arg("uname -s");
             let mut child = command.spawn().map_err(|_| AdapterFailure::Unavailable)?;
             let stdout = child.stdout.take().ok_or(AdapterFailure::Failed)?;
             let mut data = Vec::with_capacity(32);
