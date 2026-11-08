@@ -14,3 +14,5 @@ pub mod snapshot;
 pub mod transport;
 
 pub mod provider_router;
+pub mod remote_auth;
+pub mod remote_http;
