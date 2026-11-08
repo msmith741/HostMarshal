@@ -268,15 +268,33 @@ def main():
             # Tests simulate an atomic administrator update; production
             # deployments must keep the file and its parent outside the
             # HostMarshal runtime user's write authority.
-            recovery_file = root / "recovery-epoch"
-            recovery_file.write_text("100\n")
-            recovery_file.chmod(0o400)
+            # The external operator runs as a different OS principal.
+            # /run, its dedicated child, and marker are all root-owned,
+            # non-writable by HostMarshal's unprivileged test process.
+            # CI uses sudo solely to set up/advance/clean up the fixture.
+            operator_directory = Path("/run") / ("hm-ci-epoch-" + secrets.token_hex(8))
+            subprocess.run(
+                ["sudo", "install", "-d", "-o", "root", "-g", "root", "-m", "0755",
+                 str(operator_directory)],
+                check=True, capture_output=True, timeout=10,
+            )
+            recovery_file = operator_directory / "epoch"
 
             def advance_recovery_epoch(value):
-                replacement_path = root / "recovery-epoch.next"
-                replacement_path.write_text(f"{value}\n")
-                replacement_path.chmod(0o400)
-                os.replace(replacement_path, recovery_file)
+                source = root / "staged-recovery-epoch"
+                source.write_text(f"{value}\n")
+                subprocess.run(
+                    ["sudo", "install", "-o", "root", "-g", "root", "-m", "0444",
+                     str(source), str(operator_directory / "next")],
+                    check=True, capture_output=True, timeout=10,
+                )
+                subprocess.run(
+                    ["sudo", "mv", "-f", "--", str(operator_directory / "next"),
+                     str(recovery_file)],
+                    check=True, capture_output=True, timeout=10,
+                )
+
+            advance_recovery_epoch(100)
 
             app_cfg = json.loads(signer_config.read_text())
             app_cfg.pop("tokenFile")
@@ -594,6 +612,11 @@ def main():
                 ["docker", "rm", "--force", container],
                 capture_output=True, text=True, timeout=15,
             )
+            if "operator_directory" in locals():
+                subprocess.run(
+                    ["sudo", "rm", "-rf", "--", str(operator_directory)],
+                    capture_output=True, text=True, timeout=15,
+                )
 
 
 if __name__ == "__main__":

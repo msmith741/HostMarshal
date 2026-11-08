@@ -278,14 +278,35 @@ fn recovery_epoch(path: &Path) -> Result<u64> {
         path.is_absolute() && metadata.file_type().is_file() && metadata.len() <= 20,
         "recovery epoch must be an absolute, small regular file"
     );
-    let parent = fs::metadata(path.parent().context("invalid recovery marker parent")?)?;
+    ensure!(
+        fs::canonicalize(path).context("cannot resolve recovery marker")? == path,
+        "recovery epoch path must be canonical and contain no symlinks or dot components"
+    );
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        // Root-owned, non-writable marker and EVERY ancestor protect against
+        // replacement or chmod by a compromised unprivileged service user.
+        // A writable ancestor makes even a 0400 marker attacker-replaceable.
         ensure!(
-            metadata.permissions().mode() & 0o222 == 0 && parent.permissions().mode() & 0o022 == 0,
-            "recovery epoch must be read-only with a protected parent"
+            metadata.uid() == 0 && metadata.permissions().mode() & 0o222 == 0,
+            "recovery epoch must be administrator-owned and read-only"
         );
+        let mut directory = path.parent().context("invalid recovery marker parent")?;
+        loop {
+            let stat = fs::symlink_metadata(directory)
+                .context("cannot inspect recovery path ancestor")?;
+            ensure!(
+                stat.file_type().is_dir()
+                    && stat.uid() == 0
+                    && stat.permissions().mode() & 0o022 == 0,
+                "recovery epoch ancestors must be administrator-owned and protected"
+            );
+            if directory == Path::new("/") {
+                break;
+            }
+            directory = directory.parent().context("missing recovery path ancestor")?;
+        }
     }
     let content = fs::read_to_string(path).context("recovery epoch unreadable")?;
     let value = content.trim_end_matches(['\n', '\r']);
@@ -612,7 +633,9 @@ mod tests {
         {
             use std::os::unix::fs::{PermissionsExt, symlink};
             fs::set_permissions(&path, fs::Permissions::from_mode(0o400)).unwrap();
-            assert_eq!(recovery_epoch(&path).unwrap(), 4);
+            // A same-UID read-only file can be chmod'ed and replaced by the
+            // runtime principal and MUST NOT authorize recovery.
+            assert!(recovery_epoch(&path).is_err());
             let link = dir.path().join("alias");
             symlink("epoch", &link).unwrap();
             assert!(recovery_epoch(&link).is_err());
