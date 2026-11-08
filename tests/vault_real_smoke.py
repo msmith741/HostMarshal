@@ -264,6 +264,20 @@ def main():
             )
             api("PUT", "sys/policies/acl/hostmarshal-sign-only",
                 {"policy": renewable_policy}, root_token)
+            # An epoch marker is operator-owned state, never an access token.
+            # Tests simulate an atomic administrator update; production
+            # deployments must keep the file and its parent outside the
+            # HostMarshal runtime user's write authority.
+            recovery_file = root / "recovery-epoch"
+            recovery_file.write_text("100\n")
+            recovery_file.chmod(0o400)
+
+            def advance_recovery_epoch(value):
+                replacement_path = root / "recovery-epoch.next"
+                replacement_path.write_text(f"{value}\n")
+                replacement_path.chmod(0o400)
+                os.replace(replacement_path, recovery_file)
+
             app_cfg = json.loads(signer_config.read_text())
             app_cfg.pop("tokenFile")
             app_cfg["appRole"] = {
@@ -274,6 +288,7 @@ def main():
                 # Exceeds 90-second TTL intentionally: every subsequent call
                 # must exercise renew-self, rather than silently using a cache.
                 "renewBeforeSeconds": 120,
+                "recoveryEpochFile": str(recovery_file),
             }
             app_config = root / "vault-approle.json"
             app_config.write_text(json.dumps(app_cfg))
@@ -318,9 +333,63 @@ def main():
             api("PUT", "sys/policies/acl/hostmarshal-sign-only",
                 {"policy": renewable_policy}, root_token)
             observe_app(False)  # must NOT silently re-login with SecretID
+            advance_recovery_epoch(101)   # explicit operator-authorized retry
+            observe_app(True)             # fresh bounded Vault AppRole login
             app_text = app_audit.read_text()
             for value in (role_id, secret_id, root_token, restricted, replacement):
                 assert value not in app_text, "Vault credential leaked to audit"
+            process.stdin.close()
+            process.wait(timeout=6)
+            process = None
+
+            # Independent proactive lifecycle: no invocation occurs during
+            # a lease longer than its 30s TTL. A call at 36s can succeed ONLY
+            # if the provider-side background renewal kept the Vault lease
+            # alive; request-time renewal alone would be too late.
+            api("POST", "auth/approle/role/hostmarshal", {
+                "bind_secret_id": True,
+                "secret_id_num_uses": 0,
+                "token_no_default_policy": True,
+                "token_policies": ["hostmarshal-sign-only"],
+                "token_type": "service",
+                "token_ttl": "30s",
+                "token_max_ttl": "6m",
+            }, root_token)
+            proactive = dict(app_cfg)
+            proactive["appRole"] = dict(app_cfg["appRole"])
+            proactive["appRole"]["renewBeforeSeconds"] = 15
+            proactive_config = root / "vault-proactive.json"
+            proactive_config.write_text(json.dumps(proactive))
+            proactive_config.chmod(0o600)
+            process = subprocess.Popen([
+                str(BIN), "--config-dir", str(config),
+                "--principal", "example-operator",
+                "--vault-ssh-config", str(proactive_config),
+                "--audit-log", str(app_audit),
+            ], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, bufsize=1, env=environment)
+            proactive_client = MCP(process)
+
+            def observe_proactive(success):
+                result = proactive_client.tool("linux.uname", TARGET)
+                assert (result.get("isError") is not True) == success, result
+                assert not list(ephemeral.iterdir())
+
+            observe_proactive(True)
+            time.sleep(36)
+            observe_proactive(True)  # lease survived idle period beyond TTL
+            # Removing renew privilege causes the next background renewal
+            # to quarantine the session. A repaired policy alone is NOT a
+            # recovery authorization.
+            api("PUT", "sys/policies/acl/hostmarshal-sign-only",
+                {"policy": policy}, root_token)
+            time.sleep(19)
+            observe_proactive(False)
+            api("PUT", "sys/policies/acl/hostmarshal-sign-only",
+                {"policy": renewable_policy}, root_token)
+            observe_proactive(False)
+            advance_recovery_epoch(102)
+            observe_proactive(True)
             process.stdin.close()
             process.wait(timeout=6)
             process = None
@@ -390,6 +459,7 @@ def main():
                 "jwtFile": str(workload_file),
                 "expectedPolicy": "hostmarshal-sign-only",
                 "renewBeforeSeconds": 120,
+                "recoveryEpochFile": str(recovery_file),
             }
             config_jwt = root / "vault-jwt.json"
             config_jwt.write_text(json.dumps(jwt_config))
@@ -433,6 +503,8 @@ def main():
             api("PUT", "sys/policies/acl/hostmarshal-sign-only",
                 {"policy": renewable_policy}, root_token)
             observe_jwt(False)  # cannot silently re-login with JWT
+            advance_recovery_epoch(103)
+            observe_jwt(True)        # fresh JWT signature/role policy validated
             process.stdin.close()
             process.wait(timeout=6)
             process = None
@@ -501,7 +573,8 @@ def main():
             for secret in (root_token, restricted, replacement, "BEGIN OPENSSH PRIVATE KEY"):
                 assert secret not in audit_text
             assert "succeeded" in audit_text and "failed" in audit_text
-            print("Real Vault 2.2.1 TLS, restricted SSH role/token, sshd, revocation, outage and cleanup passed")
+            print("Real Vault 2.2.1 TLS, restricted SSH signing, proactive renewal, "
+                  "AppRole/JWT operator-gated recovery, sticky revocation, outage and cleanup passed")
         finally:
             if process is not None:
                 process.stdin.close()
