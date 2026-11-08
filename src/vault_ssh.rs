@@ -25,7 +25,7 @@ use crate::{
     },
     declarative::CompiledConfig,
     transport::check_public_trust_file,
-    vault_auth::{AppRoleSpec, VaultAuth},
+    vault_auth::{AppRoleSpec, JwtAuthSpec, VaultAuth},
 };
 
 const OPERATION: &str = "builtin.linux.uname/v1";
@@ -40,6 +40,7 @@ struct VaultSshConfig {
     vault_address: String,
     token_file: Option<PathBuf>,
     app_role: Option<AppRoleSpec>,
+    jwt_auth: Option<JwtAuthSpec>,
     ca_certificate_file: PathBuf,
     ssh_ca_public_key_file: PathBuf,
     mount: String,
@@ -128,7 +129,7 @@ impl VaultSshCertificateBroker {
         );
         let signing_url = url.join(&format!("v1/{}/sign/{}", spec.mount, spec.role))?;
 
-        let auth = VaultAuth::load(&url, spec.token_file, spec.app_role)?;
+        let auth = VaultAuth::load(&url, spec.token_file, spec.app_role, spec.jwt_auth)?;
         ensure!(
             spec.ca_certificate_file.is_absolute(),
             "Vault TLS CA path must be absolute"
