@@ -21,6 +21,7 @@
 | [0015](0015-issuer-neutral-jwt-workload-auth.md) | Externally issued workload JWT for scoped Vault authentication | Proposed |
 | [0016](0016-vault-proactive-renewal-recovery.md) | Proactive Vault lease renewal and operator-gated quarantine recovery | Accepted (experimental source) |
 | [0017](0017-audited-vault-lifecycle.md) | Fail-closed Vault lease maintenance auditing | Proposed |
+| [0018](0018-bounded-audit-dispatch.md) | Bounded acknowledged audit dispatch and fail-closed overload | Proposed |
 
 ## How to use ADRs
 
