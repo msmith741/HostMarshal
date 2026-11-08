@@ -53,6 +53,10 @@ A new, separate loopback-only `http` CLI mode authenticates each request with an
 
 See [Remote MCP deployment and threat model](docs/REMOTE_MCP.md) and [M4 acceptance gates](docs/M4_IMPLEMENTATION_PLAN.md).
 
+## M4 Vault SSH signer (experimental)
+
+An optional Vault SSH certificate broker generates a fresh Ed25519 keypair **after** authorization and mandatory audit, verifies the returned short-lived user certificate against a pinned CA and exact target account, and deletes ephemeral material after each call. The provider never falls back to static keys. A real Vault interoperability gate and workload token lifecycle remain outstanding. See [Vault SSH deployment and security](docs/VAULT_SSH.md).
+
 ## Parser fuzzing and MCP compatibility
 
 The regular Rust CI suite includes a deterministic mutation test for the YAML loader. The separate [fuzz workspace](fuzz/README.md) supports `cargo-fuzz` coverage-guided campaigns, with a bounded CI smoke and a weekly/manual workflow.
@@ -68,7 +72,7 @@ The old unaudited `--config` JSON mode and its hard-coded `list_hosts`/`get_host
 - [Product requirements](docs/PRODUCT.md), [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md)
 - [Configuration](docs/CONFIGURATION.md), [Capabilities](docs/CAPABILITIES.md), [Adapters](docs/ADAPTERS.md)
 - [Security architecture](docs/SECURITY_ARCHITECTURE.md), [Execution runtime](docs/EXECUTION_RUNTIME.md), [M3 observations](docs/OBSERVATION_ADAPTERS.md), [Audit](docs/AUDIT.md), [Coding standards](docs/CODING_STANDARDS.md)
-- [Remote MCP security and setup](docs/REMOTE_MCP.md), [Traceability matrix](docs/TRACEABILITY.md), [Machine-readable schemas](docs/SCHEMA_EXPORT.md), [ADRs](docs/adr/README.md)
+- [Vault SSH certificate provider](docs/VAULT_SSH.md), [Remote MCP security and setup](docs/REMOTE_MCP.md), [Traceability matrix](docs/TRACEABILITY.md), [Machine-readable schemas](docs/SCHEMA_EXPORT.md), [ADRs](docs/adr/README.md)
 - [Test strategy](docs/TEST_STRATEGY.md), [Contributing](CONTRIBUTING.md), [Security policy](SECURITY.md)
 
 ## Development
@@ -84,6 +88,7 @@ python3 tests/reload_smoke.py  # Unix only
 python3 tests/mcp_modern_smoke.py  # MCP 2026-07-28 stateless
 python3 tests/audit_smoke.py  # audited stdio execution and denial
 python3 tests/transport_smoke.py  # disposable sshd and TLS target (requires CI prerequisites)
+python3 tests/vault_ssh_smoke.py  # disposable Vault-compatible TLS signer, SSH CA and sshd
 # Pinned Python JWT dependencies: see .github/workflows/ci.yml
 python3 tests/remote_http_smoke.py  # disposable RSA/JWKS and HTTP client
 # Additional schema drift and independent validation run in CI

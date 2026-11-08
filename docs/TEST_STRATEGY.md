@@ -74,6 +74,10 @@ Unit tests enforce network-hostname validation, typed operation allowlist and gr
 
 `tests/remote_http_smoke.py` creates disposable RSA keys and a pinned JWKS, starts the loopback-only MCP HTTP listener and verifies signed-token success, subject-scoped tool visibility, denied target/argument calls, forged signature, wrong issuer/audience/key, expired/not-yet-valid/overlong tokens, missing observe scope, Host/Origin rejection, forwarded-header spoofing, oversized request denial, non-loopback listener rejection and protected auth file ACL. Existing stdio/M2/M3 tests still exercise the same coordinator. A pinned local JWKS does not validate online issuer key rotation; test that in a later M4 gate.
 
+## M4 Vault SSH signer and lease test suite
+
+`tests/vault_ssh_smoke.py` uses a disposable Vault SSH-sign API-compatible HTTPS service, real Ed25519 signing CA and disposable sshd. Cover allowed cert login, wrong signer/principal/fresh key, expired/too-short/overlong TTL, extensions, Vault outage/redirect/malformed/oversized response, token rotation, authorization before broker, mixed static/Vault sources and lease-file cleanup. `src/credentials.rs` checks expiration and tempdir ownership. A **real TLS-enabled Vault dev server with restricted policy and workload identity** is a separate unfinished release gate.
+
 ## Release-blocking failures
 
 Block publication when authorization is bypassed; a policy-negative call reaches a live adapter; credentials leak; a client can substitute a target; an observe operation performs an unintended mutation; an audit-mandatory invocation executes without its required audit commitment; or a plugin escapes its granted isolation.

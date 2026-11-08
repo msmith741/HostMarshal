@@ -93,7 +93,13 @@ A `CredentialBroker` interface accepts exact operation/target/purpose scopes. Wi
 
 The new loopback-only HTTP MCP mode authenticates every request with a locally pinned RS256 JWKS, exact issuer/resource audience, subject, lifetime and observe-only scope. Only a validated `AuthenticatedCaller` enters the authorization-aware tool discovery and execution pipeline; forwarded identity headers are ignored. The handler denies requests without a trusted request context and exposes no unauthenticated tool catalog. Host/Origin checking and bounded request bodies constrain common browser/proxy abuse.
 
-**This is not an independently authenticated public listener.** A separately managed TLS reverse proxy must secure the external endpoint and prevent direct backend access. No online JWKS renewal, OAuth protected resource metadata, token revocation, external audit of pre-MCP auth errors or Vault SSH certificate issuer has been shipped. The pinned JWKS and OS file permissions are deployment trust assumptions. Do not mark M4 complete or claim production-grade remote security on this basis alone. See [Remote MCP](REMOTE_MCP.md).
+**This is not an independently authenticated public listener.** A separately managed TLS reverse proxy must secure the external endpoint and prevent direct backend access. No online JWKS renewal, OAuth protected resource metadata, token revocation, external audit of pre-MCP auth errors or a **production-validated Vault SSH certificate issuer** has been shipped. The pinned JWKS and OS file permissions are deployment trust assumptions. Do not mark M4 complete or claim production-grade remote security on this basis alone. See [Remote MCP](REMOTE_MCP.md).
+
+## M4 Vault certificate and temporary-key trust boundary
+
+The opt-in Vault broker uses a protected OS-owned signer config, fixed role/mount, verified TLS and SSH signing CAs, per-call Ed25519 keypairs, cryptographic certificate/principal/expiry validation, and lease-owned temporary files. The coordinator checks grants/audit before the broker and validity beyond the pending operation deadline. The static-key provider and Vault signer are **mutually exclusive**; a Vault outage never triggers static fallback. The SSH adapter retains host-key pinning and the fixed Linux observation.
+
+Current Vault token authentication is from an owner-only file reread on each request, not Kubernetes/AppRole workload login or automated renewal. Real Vault role interoperability, secure token rotation, tamper-evident audit, ingress TLS, and OS egress isolation are incomplete. See [Vault SSH](VAULT_SSH.md).
 
 ## Residual risks
 

@@ -1,6 +1,6 @@
 # ADR-0012: M4 remote identity and credential-provider boundaries
 
-- **Status:** Proposed; per-request JWT/HTTP slice implemented, full M4 gate pending
+- **Status:** Proposed; JWT/HTTP and restricted Vault-compatible signer slices implemented, full M4 gate pending
 - **Date:** 2026-11-07
 - **Scope:** Authenticated remote MCP transport, provider-neutral credentials, and optional Vault SSH CA
 
@@ -44,7 +44,7 @@ An optional hypervisor API observation adapter can be added after the identity/p
 
 ## Implemented first remote-transport slice
 
-A loopback-only stateless Streamable HTTP handler now verifies each request against a **locally pinned, administrator-owned JWKS** using asymmetric RS256 keys and exact issuer/audience/expiry/not-before/issued-at/scope constraints, creates a verified caller, and delegates to the existing coordinator. The provider router enforces exact operation/target/purpose without fallback. These are **partial implementations only**: there is no external TLS ingress, online JWKS rotation/authorization-server metadata, protected-resource metadata, cross-issuer registry or Vault SSH certificate provider. See [M4 remote MCP deployment](../REMOTE_MCP.md) and [implementation gates](../M4_IMPLEMENTATION_PLAN.md).
+A loopback-only stateless Streamable HTTP handler now verifies each request against a **locally pinned, administrator-owned JWKS** using asymmetric RS256 keys and exact issuer/audience/expiry/not-before/issued-at/scope constraints, creates a verified caller, and delegates to the existing coordinator. The provider router enforces exact operation/target/purpose without fallback. These are **partial implementations only**: there is no external TLS ingress, online JWKS rotation/authorization-server metadata, protected-resource metadata, cross-issuer registry or real-Vault-validated SSH certificate provider. The opt-in signer now exists behind a protected local token file, with ephemeral key lifecycle, pinned CAs and strict certificate validation, but lacks real Vault/workload identity CI. See [M4 remote MCP deployment](../REMOTE_MCP.md) and [implementation gates](../M4_IMPLEMENTATION_PLAN.md).
 
 ## Security non-goals
 

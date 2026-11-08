@@ -60,6 +60,8 @@ Choose a versioned, explicitly documented IPC schema (e.g. protobuf/JSON over a 
 
 ## Credential handling
 
+The M4 Vault SSH provider is an optional **trusted built-in** issuing per-call, CA-verified user certificates only to the fixed Linux observation. It is not a plugin, a general secret store, or a means to select arbitrary commands. See [Vault SSH](VAULT_SSH.md).
+
 An adapter requests a specific credential purpose through the broker; it must never choose arbitrary secret paths or request unrelated tokens. Configure short-lived, scoped identities on the target system. Credential backends are optional: local protected files for development, Vault/cloud/native stores later. No provider-specific type belongs in core domain models.
 
 ## Testing obligations

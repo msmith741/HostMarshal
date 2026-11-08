@@ -24,7 +24,8 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 | FR-016 SSH target/key binding | ADR-0011, ADR-0008 | `src/observation.rs`, `src/credentials.rs`, `src/transport.rs` | real sshd integration, host-key mismatch/identity-map/command-injection tests | Implemented for fixed Linux uname only; OS/SSH hardening boundaries documented |
 | FR-017 approved HTTPS health | ADR-0011 | `src/observation.rs`, `src/transport.rs`, trusted Host YAML | local TLS integration, wrong-CA, no-redirect, deadline, URL-injection and response-body tests | Implemented for fixed GET /health only; network egress policies remain operator-managed |
 | FR-018 remote HTTP identity | ADR-0007, ADR-0012 | `src/remote_auth.rs`, `src/remote_http.rs`, `src/identity.rs`, `src/main.rs` | `tests/remote_http_smoke.py` disposable RSA/JWKS and negative token/HTTP tests | In progress — stateless signed-JWT loopback transport; no dynamic JWKS/metadata or TLS ingress implementation |
-| FR-019 provider routing | ADR-0008, ADR-0012 | `src/provider_router.rs` | provider-route unit tests for substitution, duplicate, outage and no-fallback | In progress — broker composition contract, no installed Vault provider |
+| FR-019 provider routing | ADR-0008, ADR-0012 | `src/provider_router.rs`, `src/main.rs` | provider-route unit tests; mixed-provider launch denial and Vault outage integration | In progress — exclusive Vault vs static-key selection, no coactive external backend registry |
+| FR-020 Vault SSH signing | ADR-0008, ADR-0012 | `src/vault_ssh.rs`, `src/credentials.rs`, `src/runtime.rs`, `src/observation.rs` | lease cleanup unit test, `tests/vault_ssh_smoke.py` | In progress — disposable Vault-compatible TLS signer + real SSH CA/sshd, real Vault and workload identity unverified |
 
 ## ADR implementation matrix
 
@@ -86,7 +87,7 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 ## M4 in-progress evidence
 
 - **Provider routing foundation:** `src/provider_router.rs` rejects duplicate or malformed operation/target/purpose routes, missing routes, cross-target and cross-operation requests, mismatched returned leases and unavailable providers. Provider failures never cause fallback to a broader credential source.
-- **Implemented in M4 pilot:** per-request signed JWT identity and stateless loopback HTTP, with canonical HTTPS issuer support in grant validation. **Not implemented:** online JWKS refresh, OAuth metadata, Vault-issued SSH user certificates, lease expiry/revocation, and hypervisor adapter. **No M4 completion claim** is made. See [M4 implementation plan](M4_IMPLEMENTATION_PLAN.md) and [ADR-0012](adr/0012-m4-remote-identity-and-credential-providers.md).
+- **Implemented in M4 pilot:** signed-JWT loopback HTTP plus opt-in Vault SSH signing with ephemeral, expiry-checked user certificate leases. **Not implemented:** real Vault interoperability and dynamic workload identity/token renewal, online JWKS refresh/OAuth metadata, remote TLS ingress and independent audit. **No M4 completion claim** is made. See [M4 implementation plan](M4_IMPLEMENTATION_PLAN.md) and [ADR-0012](adr/0012-m4-remote-identity-and-credential-providers.md).
 
 ## M4 in-progress security evidence
 
@@ -94,7 +95,13 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 - `src/remote_http.rs` implements a separate loopback-only stateless rmcp HTTP mode with per-request middleware identity verification, exact Host and Origin restrictions, no permissive CORS, 256 KiB body limit and POST-only access. The authenticated caller is passed to the existing coordinator for tool discovery and execution; HTTP metadata alone is never identity.
 - `src/provider_router.rs` retains no-fallback exact operation/target/purpose broker routing and scope revalidation.
 - `tests/remote_http_smoke.py` covers signature forgery, wrong issuer/audience, expired/future/oversized tokens, wrong subject permissions, forbidden Origin and Host, spoofed forwarded user, unauthorized tool arguments and unprotected config rejection.
-- **Not yet verified/completed:** remote-facing TLS ingress and bypass isolation, online JWKS refresh/rotation and OAuth metadata, auth-denial durable audit, distributed rate limits, Vault-issued SSH certificates and cleanup. **M4 remains in progress.**
+- **Not yet verified/completed:** remote-facing TLS ingress and bypass isolation, online JWKS refresh/rotation and OAuth metadata, auth-denial durable audit, distributed rate limits, actual Vault dev-server signing with workload login/renewal and independent remote audit. **M4 remains in progress.**
+
+## M4 signed SSH certificate test evidence
+
+- **FR-020:** `src/vault_ssh.rs` submits only per-invocation public keys and a fixed inventory principal to a pinned HTTPS Vault SSH signing role, and cryptographically checks the returned certificate's CA, signature, public-key match, exact user, restricted options and expiry.
+- **FR-008/019:** `src/main.rs::choose_broker` forbids simultaneous Vault/local SSH credentials, `src/credentials.rs` owns temporary lease material, and `src/runtime.rs` enforces lifetime beyond the remaining adapter deadline. The target adapter rechecks the configured principal.
+- **NFR-001/002/004:** `tests/vault_ssh_smoke.py` tests an API-compatible TLS signing **mock**, real SSH CA and sshd, unauthorized/invalid cert responses, token rotation and ephemeral file deletion. This **does not** establish real Vault interoperability. See [Vault SSH](VAULT_SSH.md).
 
 ## CI acceptance rules
 

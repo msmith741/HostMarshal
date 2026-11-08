@@ -48,9 +48,11 @@
 - Authenticated MCP Streamable HTTP, authorization-server and audience validation, network hardening.
 - Additional provider-neutral reference adapters (e.g., a hypervisor API) only after M2/M3 controls.
 
-**M4 progress:** a fail-closed, exact operation/target/purpose credential provider router and negative-path unit tests have been added. A second vertical slice adds loopback-only stateless Streamable HTTP with per-request signed-JWT authentication via pinned local JWKS and an issuer/subject-aware caller. Remote TLS ingress deployment, online key rotation/metadata, OAuth resource discovery and Vault-issued short-lived SSH certificate lifecycles are still open. This is an **internal foundation only**: remote authenticated HTTP and Vault integration are not implemented or exposed. See [M4 implementation gates](M4_IMPLEMENTATION_PLAN.md) and [proposed ADR-0012](adr/0012-m4-remote-identity-and-credential-providers.md).
+**M4 progress:** a fail-closed, exact operation/target/purpose credential provider router and negative-path unit tests have been added. A second vertical slice adds loopback-only stateless Streamable HTTP with per-request signed-JWT authentication via pinned local JWKS and an issuer/subject-aware caller. Remote TLS ingress deployment, online key rotation/metadata, OAuth resource discovery and Vault-issued short-lived SSH certificate lifecycles are still open. These are **pre-alpha slices** only, not full M4: authenticated HTTP and scoped Vault-compatible SSH signing are opt-in, while real Vault/OIDC and ingress release gates remain outstanding. See [M4 implementation gates](M4_IMPLEMENTATION_PLAN.md) and [proposed ADR-0012](adr/0012-m4-remote-identity-and-credential-providers.md).
 
 **Gate:** multiple identities, policy scopes and secret backends can be configured without source code changes or assumptions about infrastructure.
+
+**M4 Vault SSH slice:** an opt-in pinned-CA, TLS-only Vault SSH signing broker now generates ephemeral keys for the fixed Linux observation, validates short-lived signed user certificates and cleans lease-owned key files on completion/cancellation. A Vault-API-compatible local TLS fixture and real OpenSSH CA/sshd provide positive/negative integration coverage; **a real Vault dev-server, dynamic workload identity, token renewal, JWKS/OAuth expansion and remote ingress testing remain unfinished**. See [Vault SSH operations](VAULT_SSH.md).
 
 ## M5 — External extension ecosystem
 

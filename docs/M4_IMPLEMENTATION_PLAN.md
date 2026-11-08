@@ -33,6 +33,12 @@ The project now includes a loopback-only HTTP MCP listener with signed access-to
 - Use disposable Vault and sshd integration fixtures, negative tests for wrong target, expired cert, issuer mismatch, outage, renewal and cleanup.
 - Retain fail-closed behavior when Vault is unavailable. Do not silently substitute a static SSH key.
 
+### Phase C in-progress implementation
+
+The optional `--vault-ssh-config` provider now generates per-call Ed25519 keys, calls a fixed Vault SSH signing role over CA-verified TLS, validates certificates against an independently pinned SSH CA with exact inventory principal, key binding, restricted extensions and TTL, and retains key/cert files only for the lease lifetime. Launcher configuration refuses concurrent local-static and Vault providers; the M2 deadline bounds issuance and execution. The disposable Vault-API-compatible signer and real SSH CA/sshd test positive and negative paths.
+
+**Remaining phase-C gates:** real HashiCorp Vault dev-server interoperability; limited-policy workload authentication and token renewal; comprehensive CA rotation, outage/recovery and cancellation fault injection. Current local Vault token file is operator-rotated, not a complete credential lifecycle service. See [Vault SSH deployment](VAULT_SSH.md).
+
 ## Phase D — Optional provider-neutral API adapter
 
 - Add only vetted fixed read-only operations with typed target inventory and scoped credentials.
