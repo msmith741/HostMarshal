@@ -39,6 +39,10 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
+        # Kubernetes prepares group-readable Secret projection and writable
+        # tmpfs emptyDirs before the unprivileged init starts.
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
       initContainers:
         - name: prepare-protected-config
           image: busybox:1.37
@@ -47,25 +51,24 @@ spec:
             - sh
             - -ec
             - |
-              chmod 0700 /runtime
+              # UID 10001 owns the copied files; no chown or root required.
+              umask 077
               cp /identity/auth.json /runtime/auth.json
               cp /identity/ingress.proof /runtime/ingress.proof
               cp /trust/keys.json /runtime/keys.json
-              chown 10001:10001 /runtime /runtime/auth.json /runtime/ingress.proof /runtime/keys.json
               chmod 0600 /runtime/auth.json /runtime/ingress.proof
               chmod 0644 /runtime/keys.json
               proof="$(cat /identity/ingress.proof)"
               sed "s|@@INGRESS_PROOF@@|${proof}|g" /nginx-template/default.conf > /nginx-generated/default.conf
               chmod 0644 /nginx-generated/default.conf
           securityContext:
-            runAsUser: 0
+            runAsUser: 10001
+            runAsGroup: 10001
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
-              # One-shot init requires CHOWN for UID 10001 ownership and
-              # FOWNER for chmod on a Kubernetes-mounted memory volume.
-              # Both long-running containers retain drop: ALL.
-              add: [CHOWN, FOWNER]
           volumeMounts:
             - name: identity
               mountPath: /identity
@@ -147,7 +150,9 @@ spec:
         - name: identity
           secret:
             secretName: hostmarshal-ci-identity
-            defaultMode: 0400
+            # fsGroup 10001 can read the projection; copied runtime files
+            # are UID 10001-owned, 0600, and independently validated.
+            defaultMode: 0440
         - name: trust
           configMap:
             name: hostmarshal-ci-jwks

@@ -1,9 +1,18 @@
 name: Disposable K3s MCP isolation
 
 on:
+  # Expensive pre-release security assurance, independent of fast smoke tests.
   pull_request:
+    paths:
+      - 'deploy/k3s/**'
+      - 'tests/k3s_cluster_ci.py'
+      - '.github/workflows/k3s-isolation.yml'
   push:
     branches: [main]
+    paths:
+      - 'deploy/k3s/**'
+      - 'tests/k3s_cluster_ci.py'
+      - '.github/workflows/k3s-isolation.yml'
   workflow_dispatch:
 
 permissions:
@@ -70,7 +79,11 @@ jobs:
           .k3s-ci-venv/bin/python -m pip install --disable-pip-version-check \
             'PyJWT==2.10.1' 'cryptography==46.0.3'
       - name: Deploy CI-only profile and execute real policy/ingress bypass probes
-        run: .k3s-ci-venv/bin/python tests/k3s_cluster_ci.py
+        env:
+          HOSTMARSHAL_K3D_CLUSTER: hostmarshal-m4-ci
+          HOSTMARSHAL_K3D_BACKEND_NODE: k3d-hostmarshal-m4-ci-agent-0
+          HOSTMARSHAL_K3D_ATTACKER_NODE: k3d-hostmarshal-m4-ci-agent-1
+        run: .k3s-ci-venv/bin/python tests/k3s_cluster_ci.py --mode network
       - name: Non-sensitive diagnostics on failure
         if: failure()
         run: |

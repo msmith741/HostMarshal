@@ -1,0 +1,80 @@
+name: K3s deployment smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: k3s-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Single-node K3s startup, TLS ingress and authorized MCP
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout source without persistent credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate manifests, render expected security invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv .k3s-ci-venv
+          .k3s-ci-venv/bin/python -m pip install --disable-pip-version-check \
+            'PyJWT==2.10.1' 'cryptography==46.0.3' 'PyYAML==6.0.3'
+          .k3s-ci-venv/bin/python tests/k3s_manifest_contract.py
+      - name: Build HostMarshal locally from locked dependencies
+        run: |
+          set -euo pipefail
+          cargo build --locked --bin hostmarshal
+          docker build -f deploy/k3s/ci/Dockerfile -t hostmarshal-k3s-ci:ci .
+      - name: Install pinned checksum-verified k3d
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --retry 3 \
+            -o "$RUNNER_TEMP/k3d" \
+            https://github.com/k3d-io/k3d/releases/download/v5.9.0/k3d-linux-amd64
+          echo "06d8f25bc3a971c4eb29e0ff08429b180402db0f4dec838c9eac427e296800a0  $RUNNER_TEMP/k3d" \
+            | sha256sum --check --status
+          sudo install -m 0755 "$RUNNER_TEMP/k3d" /usr/local/bin/k3d
+      - name: Create single-node K3s and await bundled Traefik
+        run: |
+          set -euo pipefail
+          k3d cluster create hostmarshal-smoke \
+            --image rancher/k3s:v1.34.5-k3s1 \
+            --servers 1 --agents 0 --wait --timeout 240s
+          kubectl wait nodes --all --for=condition=Ready --timeout=180s
+          found=false
+          for attempt in $(seq 1 90); do
+            if kubectl -n kube-system get deployment traefik >/dev/null 2>&1; then
+              found=true
+              break
+            fi
+            sleep 2
+          done
+          test "$found" = true
+          kubectl -n kube-system rollout status deploy/traefik --timeout=180s
+          k3d image import hostmarshal-k3s-ci:ci --cluster hostmarshal-smoke
+      - name: Test Pod readiness, HTTPS ingress and OAuth resource protection
+        env:
+          HOSTMARSHAL_K3D_CLUSTER: hostmarshal-smoke
+          HOSTMARSHAL_K3D_BACKEND_NODE: k3d-hostmarshal-smoke-server-0
+        run: .k3s-ci-venv/bin/python tests/k3s_cluster_ci.py --mode smoke
+      - name: Safe diagnostics on failure
+        if: failure()
+        run: |
+          kubectl -n hostmarshal-ci get pod,deploy,svc,networkpolicy || true
+          kubectl -n kube-system get pod -l app.kubernetes.io/name=traefik || true
+          kubectl -n hostmarshal-ci logs deployment/hostmarshal -c prepare-protected-config --tail=20 || true
+          # Never emit application logs, proof secrets, ConfigMaps or Pod env.
+      - name: Always delete disposable cluster
+        if: always()
+        run: k3d cluster delete hostmarshal-smoke || true

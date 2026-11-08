@@ -4,6 +4,7 @@ Runs ONLY against a k3d cluster already created by the GitHub-hosted CI job.
 All config, TLS, JWKS, signing keys and ingress proofs are ephemeral. No
 homelab credentials or Kubernetes contexts are used.
 """
+import argparse
 import http.client
 import json
 import os
@@ -26,6 +27,9 @@ ISSUER = "https://issuer.example.invalid/"
 NS = "hostmarshal-ci"
 ATTACKER_NS = "hostmarshal-ci-attacker"
 NODE_LABEL = "hostmarshal.ci/role"
+CLUSTER = os.getenv("HOSTMARSHAL_K3D_CLUSTER", "hostmarshal-m4-ci")
+BACKEND_NODE = os.getenv("HOSTMARSHAL_K3D_BACKEND_NODE", f"k3d-{CLUSTER}-agent-0")
+ATTACKER_NODE = os.getenv("HOSTMARSHAL_K3D_ATTACKER_NODE", f"k3d-{CLUSTER}-agent-1")
 LOCAL_PORT = 18443
 IMAGE = "curlimages/curl:8.13.0"
 
@@ -173,13 +177,12 @@ def wait_ingress(ca, port_forward, seconds=100):
     raise AssertionError("HostMarshal TLS ingress or backend not ready")
 
 
-def install(root, tls_cert, tls_key, auth, proof, jwks):
+def install(root, tls_cert, tls_key, auth, proof, jwks, *, network=False):
     kube("create", "namespace", NS)
     kube("create", "namespace", ATTACKER_NS)
-    kube("label", "node", "k3d-hostmarshal-m4-ci-agent-0",
-         NODE_LABEL + "=backend", "--overwrite")
-    kube("label", "node", "k3d-hostmarshal-m4-ci-agent-1",
-         NODE_LABEL + "=attacker", "--overwrite")
+    kube("label", "node", BACKEND_NODE, NODE_LABEL + "=backend", "--overwrite")
+    if network:
+        kube("label", "node", ATTACKER_NODE, NODE_LABEL + "=attacker", "--overwrite")
     nginx_template = Path("deploy/k3s/ci/nginx-default.conf.tmpl").resolve()
     fixture_config = root / "config"
     fixture_config.mkdir()
@@ -247,7 +250,7 @@ def test_network_isolation(key, ca):
     assert len(pod["items"]) == 1, "requires exactly one backend"
     backend = pod["items"][0]
     backend_ip = backend["status"]["podIP"]
-    assert backend["spec"]["nodeName"].endswith("agent-0")
+    assert backend["spec"]["nodeName"] == BACKEND_NODE
     assert all(not c["securityContext"].get("allowPrivilegeEscalation", True)
                for c in backend["spec"]["containers"])
     svc = read_json("get", "service", "hostmarshal", "-n", NS)
@@ -264,7 +267,7 @@ def test_network_isolation(key, ca):
     ]:
         kube_apply_yaml(attacker_pod(name, ns, label))
         attacker = wait_pod(ns, name)
-        assert attacker["spec"]["nodeName"].endswith("agent-1"), "cross-node test not scheduled"
+        assert attacker["spec"]["nodeName"] == ATTACKER_NODE, "cross-node test not scheduled"
         # Positive: pod has valid DNS and can reach the in-cluster Kubernetes API.
         connected, proof = probe(ns, name, "https://kubernetes.default.svc")
         if not connected:
@@ -367,10 +370,19 @@ def test_authorization(key, ca):
 
 def main():
     global FORWARD
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--mode", choices=["smoke", "network"], required=True)
+    options = parser.parse_args()
+    # The test performs kubectl mutations. Reject any context other than the
+    # specifically provisioned ephemeral k3d cluster.
+    context = kube("config", "current-context").stdout.strip()
+    if context != f"k3d-{CLUSTER}":
+        raise RuntimeError("refusing Kubernetes mutations outside the named disposable k3d context")
     with tempfile.TemporaryDirectory(prefix="hm-k3s-m4-") as dirname:
         root = Path(dirname)
         signer, ca, tls_cert, tls_key, auth, proof, jwks = prepare_fixtures(root)
-        install(root, tls_cert, tls_key, auth, proof, jwks)
+        install(root, tls_cert, tls_key, auth, proof, jwks,
+                network=options.mode == "network")
         pod = read_json("get", "pods", "-n", NS, "-l", "app.kubernetes.io/name=hostmarshal")
         assert len(pod["items"]) == 1
         runtime = pod["items"][0]
@@ -383,15 +395,16 @@ def main():
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             test_authorization(signer, ca)
-            test_network_isolation(signer, ca)
-            # Recheck the authorized path after policy mutation/recovery.
-            code, _, body = external(ca, "POST", "/mcp", bearer=token(signer))
-            assert code == 200 and b"inventory.inspect" in body, code
-            print(
-                "PASS: K3s mult-node Traefik TLS, short-lived JWT, "
-                "exact allowlist, unauthorized pod+service bypass denial, "
-                "deliberate-broad-policy positive control and restoration"
-            )
+            if options.mode == "network":
+                test_network_isolation(signer, ca)
+                # Recheck the authorized path after policy mutation/recovery.
+                code, _, body = external(ca, "POST", "/mcp", bearer=token(signer))
+                assert code == 200 and b"inventory.inspect" in body, code
+                print("PASS: multi-node CNI policy isolation, unsafe-policy "
+                      "causality and restored denial, authenticated MCP TLS")
+            else:
+                print("PASS: single-node K3s Pod startup, TLS ingress, "
+                      "JWT authorization/denial, proxy-header protection")
         finally:
             FORWARD.terminate()
             FORWARD.wait(timeout=10)
