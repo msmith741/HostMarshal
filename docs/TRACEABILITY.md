@@ -1,6 +1,6 @@
 # Requirements-to-implementation traceability
 
-**Scope:** M1 configuration, M2 security runtime, and M3 vetted SSH/HTTPS observations; updated 2026-11-07.
+**Scope:** M1–M3 plus experimental M4 remote identity verification and provider routing; updated 2026-11-07.
 
 Status definitions: **Implemented (tested)** means corresponding unit/integration checks passed on CI; **In progress** means source exists but milestone acceptance is incomplete; **Planned** means no implementation. This document is not a security certification and should be checked against current CI before relying on the status.
 
@@ -23,6 +23,8 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 | FR-015 lock/fuzz/MCP matrix | ADR-0003, ADR-0009 | `Cargo.lock`, `tests/parser_mutation.rs`, `fuzz/` | locked CI, deterministic mutation test, pinned nightly fuzz smoke, legacy + modern stdio tests | Implemented (M1 coverage; live HTTP and security assessment deferred) |
 | FR-016 SSH target/key binding | ADR-0011, ADR-0008 | `src/observation.rs`, `src/credentials.rs`, `src/transport.rs` | real sshd integration, host-key mismatch/identity-map/command-injection tests | Implemented for fixed Linux uname only; OS/SSH hardening boundaries documented |
 | FR-017 approved HTTPS health | ADR-0011 | `src/observation.rs`, `src/transport.rs`, trusted Host YAML | local TLS integration, wrong-CA, no-redirect, deadline, URL-injection and response-body tests | Implemented for fixed GET /health only; network egress policies remain operator-managed |
+| FR-018 remote HTTP identity | ADR-0007, ADR-0012 | `src/remote_auth.rs`, `src/remote_http.rs`, `src/identity.rs`, `src/main.rs` | `tests/remote_http_smoke.py` disposable RSA/JWKS and negative token/HTTP tests | In progress — stateless signed-JWT loopback transport; no dynamic JWKS/metadata or TLS ingress implementation |
+| FR-019 provider routing | ADR-0008, ADR-0012 | `src/provider_router.rs` | provider-route unit tests for substitution, duplicate, outage and no-fallback | In progress — broker composition contract, no installed Vault provider |
 
 ## ADR implementation matrix
 
@@ -85,6 +87,14 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 
 - **Provider routing foundation:** `src/provider_router.rs` rejects duplicate or malformed operation/target/purpose routes, missing routes, cross-target and cross-operation requests, mismatched returned leases and unavailable providers. Provider failures never cause fallback to a broader credential source.
 - **Not yet implemented:** remote authenticated Streamable HTTP, issuer/audience/JWKS validation, Vault-issued SSH user certificates, lease expiry/revocation, and hypervisor adapter. **No M4 completion claim** is made. See [M4 implementation plan](M4_IMPLEMENTATION_PLAN.md) and [ADR-0012](adr/0012-m4-remote-identity-and-credential-providers.md).
+
+## M4 in-progress security evidence
+
+- `src/remote_auth.rs` verifies RS256 signatures with *pinned local* JWKS, exact HTTPS issuer/resource audience, mandatory expiration/not-before/issued-at, bounded lifetime, `at+jwt` header type and `hostmarshal.observe` scope. Unknown keys or invalid tokens deny access.
+- `src/remote_http.rs` implements a separate loopback-only stateless rmcp HTTP mode with per-request middleware identity verification, exact Host and Origin restrictions, no permissive CORS, 256 KiB body limit and POST-only access. The authenticated caller is passed to the existing coordinator for tool discovery and execution; HTTP metadata alone is never identity.
+- `src/provider_router.rs` retains no-fallback exact operation/target/purpose broker routing and scope revalidation.
+- `tests/remote_http_smoke.py` covers signature forgery, wrong issuer/audience, expired/future/oversized tokens, wrong subject permissions, forbidden Origin and Host, spoofed forwarded user, unauthorized tool arguments and unprotected config rejection.
+- **Not yet verified/completed:** remote-facing TLS ingress and bypass isolation, online JWKS refresh/rotation and OAuth metadata, auth-denial durable audit, distributed rate limits, Vault-issued SSH certificates and cleanup. **M4 remains in progress.**
 
 ## CI acceptance rules
 

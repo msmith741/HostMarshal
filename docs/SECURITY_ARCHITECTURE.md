@@ -89,6 +89,12 @@ For each invocation, the audit sink must accept `Authorized` *before* credential
 
 A `CredentialBroker` interface accepts exact operation/target/purpose scopes. Without an explicit protected local SSH identity mapping, the broker denies credential requests. M3's minimal local key-path broker allows only `builtin.linux.uname/v1` for mapped targets with purpose `ssh-observe`. Real external/short-lived secret provider integration remains M4. See [M3 security design](OBSERVATION_ADAPTERS.md). External plugins, remote authentication, approvals, cancellation guarantees for privileged work and real host adapters are explicitly absent.
 
+## M4 experimental remote MCP trust boundary
+
+The new loopback-only HTTP MCP mode authenticates every request with a locally pinned RS256 JWKS, exact issuer/resource audience, subject, lifetime and observe-only scope. Only a validated `AuthenticatedCaller` enters the authorization-aware tool discovery and execution pipeline; forwarded identity headers are ignored. The handler denies requests without a trusted request context and exposes no unauthenticated tool catalog. Host/Origin checking and bounded request bodies constrain common browser/proxy abuse.
+
+**This is not an independently authenticated public listener.** A separately managed TLS reverse proxy must secure the external endpoint and prevent direct backend access. No online JWKS renewal, OAuth protected resource metadata, token revocation, external audit of pre-MCP auth errors or Vault SSH certificate issuer has been shipped. The pinned JWKS and OS file permissions are deployment trust assumptions. Do not mark M4 complete or claim production-grade remote security on this basis alone. See [Remote MCP](REMOTE_MCP.md).
+
 ## Residual risks
 
 Signatures prove origin, not safety. A compromised broker/OS or overly powerful target credential can circumvent application-level intent. Misclassified adapter operations remain dangerous unless runtime and target permissions enforce least privilege. Security review and adversarial tests must assess these risks, not merely run Clippy.

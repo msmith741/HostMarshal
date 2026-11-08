@@ -19,6 +19,12 @@
 - Test using disposable issuer and remote clients for all invalid-token, cross-identity, reload, concurrency and bypass cases.
 - Do not ship a listener accepting unverified bearer tokens or headers.
 
+### Phase B vertical-slice progress
+
+The project now includes a loopback-only HTTP MCP listener with signed access-token validation using a pinned, local JWKS. Verification is per request; the SDK passes a trusted identity extension into the existing execution coordinator. Test coverage includes forged/expired/wrong-audience tokens, subject isolation and common HTTP header bypasses.
+
+**Still blocking phase-B completion:** online JWKS renewal/rotation, external TLS ingress proof and bypass isolation, authorization-server/protected-resource metadata, HTTP request/denial auditing and more extensive concurrency/availability tests. No internet-facing listener is enabled.
+
 ## Phase C — Vault SSH certificate provider
 
 - Introduce an optional provider that authenticates to Vault with a narrow workload identity, verifies TLS and approved role/path, and obtains **short-lived SSH user certificates**.

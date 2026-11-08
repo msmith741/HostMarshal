@@ -1,6 +1,6 @@
 # ADR-0012: M4 remote identity and credential-provider boundaries
 
-- **Status:** Proposed; implementation gate pending
+- **Status:** Proposed; per-request JWT/HTTP slice implemented, full M4 gate pending
 - **Date:** 2026-11-07
 - **Scope:** Authenticated remote MCP transport, provider-neutral credentials, and optional Vault SSH CA
 
@@ -41,6 +41,10 @@ An optional hypervisor API observation adapter can be added after the identity/p
 3. Disposable Vault dev server with restricted policies and an isolated SSH CA: successful scoped issuance, wrong role/target, wrong Vault token, Vault outage, malformed certificate, expiry, rotation, cancellation cleanup and no secret disclosure.
 4. M2/M3 regression: authorization before broker, no target substitution, audit failure prevents credential acquisition, strict pinned SSH trust, and no generic shell/API.
 5. Release gates: documented operational trust roots, key rotation, outage and break-glass runbooks, pinned dependencies, vulnerability scan, complete traceability and independent security review.
+
+## Implemented first remote-transport slice
+
+A loopback-only stateless Streamable HTTP handler now verifies each request against a **locally pinned, administrator-owned JWKS** using asymmetric RS256 keys and exact issuer/audience/expiry/not-before/issued-at/scope constraints, creates a verified caller, and delegates to the existing coordinator. The provider router enforces exact operation/target/purpose without fallback. These are **partial implementations only**: there is no external TLS ingress, online JWKS rotation/authorization-server metadata, protected-resource metadata, cross-issuer registry or Vault SSH certificate provider. See [M4 remote MCP deployment](../REMOTE_MCP.md) and [implementation gates](../M4_IMPLEMENTATION_PLAN.md).
 
 ## Security non-goals
 

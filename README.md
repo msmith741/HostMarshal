@@ -4,7 +4,7 @@
 
 HostMarshal is a vendor-neutral, pre-alpha Rust infrastructure capability gateway. It supports MCP over stdio, versioned YAML capabilities, and a centralized audited execution coordinator for vetted inventory, Linux SSH and HTTPS observations.
 
-> **Pre-alpha.** M3 adds fixed Linux `uname -s` over pinned-host-key SSH and a fixed HTTPS `/health` GET. There is **no** generic remote command, arbitrary URL, mutation, external plugin, remote MCP authentication, short-lived secret issuance or tamper-evident audit. Use a dedicated minimally privileged OS/SSH identity and trusted configuration.
+> **Pre-alpha.** M4 adds an optional loopback-only, JWT-authenticated Streamable HTTP MCP entrypoint. See [remote MCP security](docs/REMOTE_MCP.md). It is not a production-ready remote service. M3 adds fixed Linux `uname -s` over pinned-host-key SSH and a fixed HTTPS `/health` GET. There is **no** generic remote command, arbitrary URL, mutation, external plugin, remote MCP authentication, short-lived secret issuance or tamper-evident audit. Use a dedicated minimally privileged OS/SSH identity and trusted configuration.
 
 ## Declarative M1 configuration + M2 execution runtime
 
@@ -47,6 +47,12 @@ Every published MCP `tools/call` goes through the central [execution runtime](do
 
 Structured audit events go to stderr by default; for a local synchronized JSONL file, run from a trusted launcher with `--audit-log /protected/audit/events.jsonl` (outside the YAML directory). See [Audit](docs/AUDIT.md) for permissions, log retention and limitations. For transport setup and restrictions see [M3 observation adapters](docs/OBSERVATION_ADAPTERS.md) and [portable example](examples/m3-observations/README.md).
 
+## M4 experimental authenticated HTTP MCP
+
+A new, separate loopback-only `http` CLI mode authenticates each request with an administrator-pinned RS256 JWKS and exact issuer/audience, validates JWT lifetime/scope and binds the verified subject to the existing authorization coordinator. The public-facing HTTPS/TLS reverse proxy must be separately configured and protected. This is **not** a full OIDC discovery, key-rotation or Vault credential integration; M4 remains unfinished.
+
+See [Remote MCP deployment and threat model](docs/REMOTE_MCP.md) and [M4 acceptance gates](docs/M4_IMPLEMENTATION_PLAN.md).
+
 ## Parser fuzzing and MCP compatibility
 
 The regular Rust CI suite includes a deterministic mutation test for the YAML loader. The separate [fuzz workspace](fuzz/README.md) supports `cargo-fuzz` coverage-guided campaigns, with a bounded CI smoke and a weekly/manual workflow.
@@ -62,7 +68,7 @@ The old unaudited `--config` JSON mode and its hard-coded `list_hosts`/`get_host
 - [Product requirements](docs/PRODUCT.md), [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md)
 - [Configuration](docs/CONFIGURATION.md), [Capabilities](docs/CAPABILITIES.md), [Adapters](docs/ADAPTERS.md)
 - [Security architecture](docs/SECURITY_ARCHITECTURE.md), [Execution runtime](docs/EXECUTION_RUNTIME.md), [M3 observations](docs/OBSERVATION_ADAPTERS.md), [Audit](docs/AUDIT.md), [Coding standards](docs/CODING_STANDARDS.md)
-- [Traceability matrix](docs/TRACEABILITY.md), [Machine-readable schemas](docs/SCHEMA_EXPORT.md), [ADRs](docs/adr/README.md)
+- [Remote MCP security and setup](docs/REMOTE_MCP.md), [Traceability matrix](docs/TRACEABILITY.md), [Machine-readable schemas](docs/SCHEMA_EXPORT.md), [ADRs](docs/adr/README.md)
 - [Test strategy](docs/TEST_STRATEGY.md), [Contributing](CONTRIBUTING.md), [Security policy](SECURITY.md)
 
 ## Development
@@ -78,6 +84,8 @@ python3 tests/reload_smoke.py  # Unix only
 python3 tests/mcp_modern_smoke.py  # MCP 2026-07-28 stateless
 python3 tests/audit_smoke.py  # audited stdio execution and denial
 python3 tests/transport_smoke.py  # disposable sshd and TLS target (requires CI prerequisites)
+# Pinned Python JWT dependencies: see .github/workflows/ci.yml
+python3 tests/remote_http_smoke.py  # disposable RSA/JWKS and HTTP client
 # Additional schema drift and independent validation run in CI
 ~~~
 
