@@ -10,9 +10,9 @@ use hostmarshal::{
     declarative::CompiledConfig,
     dynamic_mcp::DeclarativeMcp,
     identity::AuthenticatedCaller,
-    runtime::ExecutionCoordinator,
     remote_auth::RemoteJwtVerifier,
     remote_http,
+    runtime::ExecutionCoordinator,
     snapshot::ConfigStore,
 };
 use rmcp::{ServiceExt, transport::stdio};
@@ -101,11 +101,19 @@ async fn main() -> Result<()> {
             );
             Ok(())
         }
-        [http, listen_flag, address, config_flag, directory, auth_flag, auth_file, options @ ..]
-            if http == "http"
-                && listen_flag == "--listen"
-                && config_flag == "--config-dir"
-                && auth_flag == "--auth-config" =>
+        [
+            http,
+            listen_flag,
+            address,
+            config_flag,
+            directory,
+            auth_flag,
+            auth_file,
+            options @ ..,
+        ] if http == "http"
+            && listen_flag == "--listen"
+            && config_flag == "--config-dir"
+            && auth_flag == "--auth-config" =>
         {
             let mut audit_file = None;
             let mut ssh_map = None;
@@ -237,7 +245,10 @@ async fn serve_remote_http(
     let address: SocketAddr = listen.parse()?;
     // Bind loopback only. External clients must come through a separately
     // secured TLS reverse proxy; no X-Forwarded-User authentication shortcut.
-    anyhow::ensure!(address.ip().is_loopback(), "HTTP MCP must listen on loopback");
+    anyhow::ensure!(
+        address.ip().is_loopback(),
+        "HTTP MCP must listen on loopback"
+    );
     let verifier = Arc::new(RemoteJwtVerifier::load(Path::new(auth_file))?);
     let config = CompiledConfig::load(Path::new(directory))?;
     let store = Arc::new(ConfigStore::new(config));

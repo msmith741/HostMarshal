@@ -38,7 +38,10 @@ impl AuthenticatedCaller {
     /// This constructor may be called only after cryptographic token verification
     /// in the trusted remote authentication module, never from an MCP field.
     pub(crate) fn from_verified_jwt(issuer: &str, subject: &str) -> Result<Self> {
-        ensure!(issuer.starts_with("https://") && !subject.is_empty(), "invalid verified identity");
+        ensure!(
+            issuer.starts_with("https://") && !subject.is_empty(),
+            "invalid verified identity"
+        );
         Ok(Self {
             issuer: issuer.to_owned(),
             subject: subject.to_owned(),
