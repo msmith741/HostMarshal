@@ -5,6 +5,7 @@ use std::{env, path::Path, sync::Arc};
 use anyhow::{Result, bail};
 use hostmarshal::{
     audit::{AuditSink, JsonlFileAudit, StderrAudit},
+    audit_delivery::{AuditDeliverySpec, BoundedAuditSink},
     authorization::{AuthorizationRequest, Authorizer, GrantAuthorizer},
     credentials::{CredentialBroker, DenyCredentialBroker, LocalSshKeyBroker},
     declarative::CompiledConfig,
@@ -117,6 +118,7 @@ async fn main() -> Result<()> {
             && auth_flag == "--auth-config" =>
         {
             let mut audit_file = None;
+            let mut audit_delivery = None;
             let mut ssh_map = None;
             let mut vault_ssh = None;
             let mut remaining = options;
@@ -126,6 +128,9 @@ async fn main() -> Result<()> {
                 };
                 match flag.as_str() {
                     "--audit-log" if audit_file.is_none() => audit_file = Some(value.as_str()),
+                    "--audit-delivery-config" if audit_delivery.is_none() => {
+                        audit_delivery = Some(value.as_str());
+                    }
                     "--ssh-credential-map" if ssh_map.is_none() => ssh_map = Some(value.as_str()),
                     "--vault-ssh-config" if vault_ssh.is_none() => vault_ssh = Some(value.as_str()),
                     _ => bail!("unknown or repeated HTTP server option"),
@@ -133,7 +138,7 @@ async fn main() -> Result<()> {
                 remaining = rest;
             }
             serve_remote_http(
-                address, directory, auth_file, audit_file, ssh_map, vault_ssh,
+                address, directory, auth_file, audit_file, audit_delivery, ssh_map, vault_ssh,
             )
             .await
         }
@@ -141,6 +146,7 @@ async fn main() -> Result<()> {
             if flag == "--config-dir" && principal_flag == "--principal" =>
         {
             let mut audit_path = None;
+            let mut audit_delivery = None;
             let mut ssh_map = None;
             let mut vault_ssh = None;
             let mut remaining = rest;
@@ -150,13 +156,24 @@ async fn main() -> Result<()> {
                 };
                 match option.as_str() {
                     "--audit-log" if audit_path.is_none() => audit_path = Some(value.as_str()),
+                    "--audit-delivery-config" if audit_delivery.is_none() => {
+                        audit_delivery = Some(value.as_str());
+                    }
                     "--ssh-credential-map" if ssh_map.is_none() => ssh_map = Some(value.as_str()),
                     "--vault-ssh-config" if vault_ssh.is_none() => vault_ssh = Some(value.as_str()),
                     _ => bail!("unknown or duplicate server option"),
                 };
                 remaining = tail;
             }
-            serve_declarative(directory, principal, audit_path, ssh_map, vault_ssh).await
+            serve_declarative(
+                directory,
+                principal,
+                audit_path,
+                audit_delivery,
+                ssh_map,
+                vault_ssh,
+            )
+            .await
         }
         _ => bail!(
             "usage: hostmarshal config validate <directory> | \
@@ -166,9 +183,11 @@ async fn main() -> Result<()> {
                  --capability <name> --target <host-id> | \
              hostmarshal http --listen <127.0.0.1:port> --config-dir <directory> \
                  --auth-config <protected-json-file> [--audit-log <file>] \
+                 [--audit-delivery-config <protected-json-file>] \
                  [--ssh-credential-map <file> | --vault-ssh-config <file>] | \
              hostmarshal --config-dir <directory> --principal <trusted-launcher-subject> \
              [--audit-log <protected-file-path>] \
+             [--audit-delivery-config <protected-json-file>] \
              [--ssh-credential-map <protected-json-file> | --vault-ssh-config <file>] | \
              Use YAML resources; legacy --config JSON mode has been retired"
         ),
@@ -179,6 +198,7 @@ async fn serve_declarative(
     directory: &str,
     principal: &str,
     audit_path: Option<&str>,
+    audit_delivery: Option<&str>,
     ssh_map: Option<&str>,
     vault_ssh: Option<&str>,
 ) -> Result<()> {
@@ -186,10 +206,7 @@ async fn serve_declarative(
     // No MCP message can choose or modify either value.
     let caller = AuthenticatedCaller::from_trusted_launcher(principal)?;
     let config = CompiledConfig::load(Path::new(directory))?;
-    let audit: Arc<dyn AuditSink> = match audit_path {
-        Some(path) => Arc::new(JsonlFileAudit::open(Path::new(path))?),
-        None => Arc::new(StderrAudit),
-    };
+    let audit = open_audit(audit_path, audit_delivery)?;
     let broker = choose_broker(&config, ssh_map, vault_ssh, Arc::clone(&audit))?;
     let store = Arc::new(ConfigStore::new(config));
     let runtime = Arc::new(ExecutionCoordinator::new(Arc::clone(&store), broker, audit));
@@ -244,6 +261,7 @@ async fn serve_remote_http(
     directory: &str,
     auth_file: &str,
     audit_path: Option<&str>,
+    audit_delivery: Option<&str>,
     ssh_map: Option<&str>,
     vault_ssh: Option<&str>,
 ) -> Result<()> {
@@ -259,16 +277,32 @@ async fn serve_remote_http(
     let verifier = Arc::new(RemoteJwtVerifier::load(Path::new(auth_file))?);
     verifier.validate_authorization_server().await?;
     let config = CompiledConfig::load(Path::new(directory))?;
-    let audit: Arc<dyn AuditSink> = match audit_path {
-        Some(path) => Arc::new(JsonlFileAudit::open(Path::new(path))?),
-        None => Arc::new(StderrAudit),
-    };
+    let audit = open_audit(audit_path, audit_delivery)?;
     let broker = choose_broker(&config, ssh_map, vault_ssh, Arc::clone(&audit))?;
     let store = Arc::new(ConfigStore::new(config));
     let runtime = Arc::new(ExecutionCoordinator::new(Arc::clone(&store), broker, audit));
     #[cfg(unix)]
     register_reload_signals(store, PathBuf::from(directory))?;
     remote_http::serve_loopback(address, runtime, verifier).await
+}
+
+/// Only the trusted launcher can choose the delivery policy and sink.
+/// Neither MCP requests nor YAML grants can supply delivery destinations.
+fn open_audit(
+    audit_path: Option<&str>,
+    delivery_config: Option<&str>,
+) -> Result<Arc<dyn AuditSink>> {
+    let sink: Arc<dyn AuditSink> = match audit_path {
+        Some(path) => Arc::new(JsonlFileAudit::open(Path::new(path))?),
+        None => Arc::new(StderrAudit),
+    };
+    match delivery_config {
+        Some(path) => {
+            let spec = AuditDeliverySpec::load(Path::new(path))?;
+            Ok(Arc::new(BoundedAuditSink::from_spec(sink, &spec)?))
+        }
+        None => Ok(sink),
+    }
 }
 
 fn choose_broker(
