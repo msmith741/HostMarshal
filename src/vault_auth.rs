@@ -377,7 +377,18 @@ impl LeaseLifecycle {
     }
 
     fn quarantined(&self) -> State {
-        State::Quarantined(observed_epoch(self.recovery_epoch_file.as_ref()))
+        self.quarantined_after_failure(None)
+    }
+
+    // A rollback, replay or transient read failure must never lower an
+    // already-observed recovery authorization boundary.
+    fn quarantined_after_failure(&self, baseline: Option<u64>) -> State {
+        let observed = observed_epoch(self.recovery_epoch_file.as_ref());
+        State::Quarantined(match (baseline, observed) {
+            (Some(previous), Some(current)) => Some(previous.max(current)),
+            (Some(previous), None) => Some(previous),
+            (None, current) => current,
+        })
     }
 
     async fn acquire<F>(
@@ -391,7 +402,13 @@ impl LeaseLifecycle {
         let mut state = self.state.lock().await;
         let old = std::mem::replace(&mut *state, self.quarantined());
         let active = match old {
-            State::Cold => login.await?,
+            State::Cold => match login.await {
+                Ok(active) => active,
+                Err(error) => {
+                    *state = self.quarantined_after_failure(None);
+                    return Err(error);
+                }
+            },
             State::Quarantined(previous) => {
                 let current = observed_epoch(self.recovery_epoch_file.as_ref());
                 if !matches!((previous, current), (Some(old), Some(new)) if new > old) {
@@ -400,23 +417,41 @@ impl LeaseLifecycle {
                     *state = State::Quarantined(previous);
                     return Err(BrokerFailure::Denied);
                 }
-                // The marker was already consumed by the replacement state.
-                // Failure of the new login requires ANOTHER operator increment.
-                login.await?
+                // The marker authorizes exactly one login attempt. Capture
+                // its latest value after a failed attempt too, so an update
+                // made during the in-flight login cannot be replayed.
+                match login.await {
+                    Ok(active) => active,
+                    Err(error) => {
+                        *state = self.quarantined_after_failure(current);
+                        return Err(error);
+                    }
+                }
             }
             State::Active(active) => {
                 if active.expires <= Instant::now() {
+                    *state = self.quarantined_after_failure(None);
                     return Err(BrokerFailure::Denied);
                 }
-                if active.expires.saturating_duration_since(Instant::now()) <= self.renew_before {
-                    renew_active(
+                // Apply the same minimum one-third-TTL spacing to foreground
+                // and background renewal. A threshold larger than the lease
+                // TTL must not cause a renewal on every authorized request.
+                if active.maintain_at <= Instant::now() {
+                    match renew_active(
                         client,
                         &self.renew_url,
                         &self.policy,
                         self.renew_before,
                         active,
                     )
-                    .await?
+                    .await
+                    {
+                        Ok(renewed) => renewed,
+                        Err(error) => {
+                            *state = self.quarantined_after_failure(None);
+                            return Err(error);
+                        }
+                    }
                 } else {
                     active
                 }
@@ -455,7 +490,10 @@ impl LeaseLifecycle {
                 let mut state = owner.state.lock().await;
                 let old = std::mem::replace(&mut *state, owner.quarantined());
                 let active = match old {
-                    State::Active(active) if active.expires <= Instant::now() => return,
+                    State::Active(active) if active.expires <= Instant::now() => {
+                        *state = owner.quarantined_after_failure(None);
+                        return;
+                    }
                     State::Active(active) if active.maintain_at <= Instant::now() => {
                         match renew_active(
                             &client,
@@ -467,11 +505,24 @@ impl LeaseLifecycle {
                         .await
                         {
                             Ok(renewed) => renewed,
-                            Err(_) => return, // sticky quarantine, no retry
+                            Err(_) => {
+                                *state = owner.quarantined_after_failure(None);
+                                return; // sticky quarantine, no retry
+                            }
                         }
                     }
                     State::Active(active) => active, // foreground renewed already
-                    _ => return,
+                    // Do not replace an existing quarantine baseline with a
+                    // fresh file observation: a rollback/replay might otherwise
+                    // become a valid recovery epoch.
+                    State::Quarantined(previous) => {
+                        *state = State::Quarantined(previous);
+                        return;
+                    }
+                    State::Cold => {
+                        *state = State::Cold;
+                        return;
+                    }
                 };
                 *state = State::Active(active);
             }
