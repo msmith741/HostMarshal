@@ -76,7 +76,7 @@ Unit tests enforce network-hostname validation, typed operation allowlist and gr
 
 ## M4 Vault SSH signer and lease test suite
 
-`tests/vault_ssh_smoke.py` uses a disposable Vault SSH-sign API-compatible HTTPS service, real Ed25519 signing CA and disposable sshd. Cover allowed cert login, wrong signer/principal/fresh key, expired/too-short/overlong TTL, extensions, Vault outage/redirect/malformed/oversized response, token rotation, authorization before broker, mixed static/Vault sources and lease-file cleanup. `src/credentials.rs` checks expiration and tempdir ownership. A **real TLS-enabled Vault dev server with restricted policy and workload identity** is a separate unfinished release gate.
+`tests/vault_ssh_smoke.py` uses a disposable Vault SSH-sign API-compatible HTTPS service, real Ed25519 signing CA and disposable sshd. Cover allowed cert login, wrong signer/principal/fresh key, expired/too-short/overlong TTL, extensions, Vault outage/redirect/malformed/oversized response, token rotation, authorization before broker, mixed static/Vault sources and lease-file cleanup. `src/credentials.rs` checks expiration and tempdir ownership. `tests/vault_real_smoke.py` now exercises a **real HashiCorp Vault 2.2.1 TLS dev server** with a restricted SSH signing role and token, role-controlled certificate key IDs, Ed25519 CA, disposable sshd, token revocation/replacement, outage and cleanup. This independent `vault-real` CI job passed on a retry after a transient GitHub runner account-creation timeout. **Trusted workload identity login/renewal**, multi-CA rotation, production topology and independent security review remain unfinished release gates.
 
 ## Release-blocking failures
 

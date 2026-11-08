@@ -55,7 +55,7 @@ See [Remote MCP deployment and threat model](docs/REMOTE_MCP.md) and [M4 accepta
 
 ## M4 Vault SSH signer (experimental)
 
-An optional Vault SSH certificate broker generates a fresh Ed25519 keypair **after** authorization and mandatory audit, verifies the returned short-lived user certificate against a pinned CA and exact target account, and deletes ephemeral material after each call. The provider never falls back to static keys. A real Vault interoperability gate and workload token lifecycle remain outstanding. See [Vault SSH deployment and security](docs/VAULT_SSH.md).
+An optional Vault SSH certificate broker generates a fresh Ed25519 keypair **after** authorization and mandatory audit, verifies the returned short-lived user certificate against a pinned CA and exact target account, and deletes ephemeral material after each call. The provider never falls back to static keys. A real Vault 2.2.1 TLS dev-server with restricted signing token and actual SSH login now passes CI; production workload login/renewal and full M4 release gates remain outstanding. See [Vault SSH deployment and security](docs/VAULT_SSH.md).
 
 ## Parser fuzzing and MCP compatibility
 

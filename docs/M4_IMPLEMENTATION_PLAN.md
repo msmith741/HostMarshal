@@ -37,7 +37,7 @@ The project now includes a loopback-only HTTP MCP listener with signed access-to
 
 The optional `--vault-ssh-config` provider now generates per-call Ed25519 keys, calls a fixed Vault SSH signing role over CA-verified TLS, validates certificates against an independently pinned SSH CA with exact inventory principal, key binding, restricted extensions and TTL, and retains key/cert files only for the lease lifetime. Launcher configuration refuses concurrent local-static and Vault providers; the M2 deadline bounds issuance and execution. The disposable Vault-API-compatible signer and real SSH CA/sshd test positive and negative paths.
 
-**Remaining phase-C gates:** real HashiCorp Vault dev-server interoperability; limited-policy workload authentication and token renewal; comprehensive CA rotation, outage/recovery and cancellation fault injection. Current local Vault token file is operator-rotated, not a complete credential lifecycle service. See [Vault SSH deployment](VAULT_SSH.md).
+**Completed phase-C integration gate (CI):** `tests/vault_real_smoke.py` provisions a disposable TLS-enabled HashiCorp Vault 2.2.1 dev server, an Ed25519 SSH CA, a policy-restricted signing token and a real OpenSSH server. It verifies authorized SSH login, token replacement/revocation, provider outage, denied operations and temporary-key cleanup. **Still open:** trusted workload login (AppRole/Kubernetes) and automatic token renewal, full CA rotation and recovery fault injection, independent security review and production deployment proof. A local operator-rotated token file is not a complete credential lifecycle service. See [Vault SSH deployment](VAULT_SSH.md).
 
 ## Phase D — Optional provider-neutral API adapter
 
