@@ -453,10 +453,11 @@ def main():
                 ], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE, text=True, bufsize=1, env=environment)
                 try:
-                    denial = MCP(negative).tool("linux.uname", TARGET)
+                    negative_client = MCP(negative)
+                    denial = negative_client.tool("linux.uname", TARGET)
                     assert denial.get("isError") is True, denial
                     workload_file.write_text(workload_token())
-                    sticky = MCP(negative).tool("linux.uname", TARGET)
+                    sticky = negative_client.tool("linux.uname", TARGET)
                     assert sticky.get("isError") is True, sticky
                 finally:
                     negative.stdin.close()

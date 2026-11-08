@@ -471,7 +471,7 @@ mod tests {
             symlink("..data/token", projection.join("token")).unwrap();
             assert!(check_workload_jwt(&projection.join("token")).is_ok());
             fs::remove_file(projection.join("..data")).unwrap();
-            symlink(tmp.path().to_path_buf(), projection.join("..data")).unwrap();
+            symlink(tmp.path(), projection.join("..data")).unwrap();
             assert!(check_workload_jwt(&projection.join("token")).is_err());
         }
     }
