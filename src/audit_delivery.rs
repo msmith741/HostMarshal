@@ -50,7 +50,10 @@ impl AuditDeliverySpec {
     }
 
     fn validate(&self) -> Result<()> {
-        ensure!(self.api_version == API_VERSION, "unsupported audit delivery version");
+        ensure!(
+            self.api_version == API_VERSION,
+            "unsupported audit delivery version"
+        );
         ensure!(
             (1..=256).contains(&self.queue_capacity),
             "audit queue capacity must be 1..=256"
@@ -202,8 +205,7 @@ mod tests {
     #[test]
     fn acknowledged_events_reach_the_underlying_sink_in_order() {
         let capture = Arc::new(Capture::default());
-        let dispatcher =
-            BoundedAuditSink::new(capture.clone(), 2, Duration::from_secs(2)).unwrap();
+        let dispatcher = BoundedAuditSink::new(capture.clone(), 2, Duration::from_secs(2)).unwrap();
         let mut first = sample();
         let mut second = sample();
         first.request_id = "one".to_owned();
@@ -290,13 +292,15 @@ mod tests {
         // sink; filling the one-slot queue is now deterministic.
         entered.recv_timeout(Duration::from_secs(1)).unwrap();
         let (committed, _receipt) = mpsc::sync_channel(1);
-        assert!(dispatcher
-            .sender
-            .try_send(Delivery {
-                event: sample(),
-                committed,
-            })
-            .is_ok());
+        assert!(
+            dispatcher
+                .sender
+                .try_send(Delivery {
+                    event: sample(),
+                    committed,
+                })
+                .is_ok()
+        );
         assert!(dispatcher.record(&sample()).is_err());
         assert!(!dispatcher.healthy.load(Ordering::SeqCst));
         release.send(()).unwrap();
@@ -306,8 +310,7 @@ mod tests {
     #[test]
     fn oversize_event_fails_closed_without_writer_use() {
         let capture = Arc::new(Capture::default());
-        let dispatcher =
-            BoundedAuditSink::new(capture.clone(), 1, Duration::from_secs(1)).unwrap();
+        let dispatcher = BoundedAuditSink::new(capture.clone(), 1, Duration::from_secs(1)).unwrap();
         let mut event = sample();
         event.subject = "a".repeat(MAX_EVENT_BYTES);
         assert!(dispatcher.record(&event).is_err());
