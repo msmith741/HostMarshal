@@ -198,7 +198,7 @@ impl RemoteJwtVerifier {
                 let proof_file = Path::new(&ingress.proof_file);
                 check_private_key_file(proof_file).context("ingress proof file not protected")?;
                 let proof = fs::read(proof_file)?;
-                let proof = proof.strip_suffix(b"\\n").unwrap_or(&proof);
+                let proof = proof.strip_suffix(b"\n").unwrap_or(&proof);
                 ensure!(proof.len() >= 32 && proof.len() <= 256
                     && proof.iter().all(u8::is_ascii_graphic), "invalid ingress proof length/characters");
                 let digest: [u8; 32] = Sha256::digest(proof).into();

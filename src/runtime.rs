@@ -77,6 +77,7 @@ impl RuntimeFailure {
 pub(crate) enum HttpRejection {
     Method,
     Host,
+    Ingress,
     Origin,
     MissingBearer,
     DuplicateBearer,
@@ -89,6 +90,7 @@ impl HttpRejection {
         match self {
             Self::Method => "http_method_rejected",
             Self::Host => "http_host_rejected",
+            Self::Ingress => "http_ingress_rejected",
             Self::Origin => "http_origin_rejected",
             Self::MissingBearer => "http_missing_bearer",
             Self::DuplicateBearer => "http_duplicate_bearer",

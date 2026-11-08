@@ -7,6 +7,7 @@ use axum::{
     Router,
     extract::{Request, State},
     http::{Method, StatusCode, header},
+    Json,
     middleware::{self, Next},
     response::{IntoResponse, Response},
 };
@@ -110,14 +111,6 @@ async fn require_bearer(
 ) -> Response {
     // HTTP is intentionally loopback-only; TLS must be enforced by a locally
     // controlled reverse proxy. Never accept X-Forwarded-* as identity.
-    if request.method() != Method::POST {
-        return reject(
-            &state,
-            HttpRejection::Method,
-            None,
-            StatusCode::METHOD_NOT_ALLOWED.into_response(),
-        );
-    }
     let host = request
         .headers()
         .get(header::HOST)
@@ -128,6 +121,41 @@ async fn require_bearer(
             HttpRejection::Host,
             None,
             StatusCode::BAD_REQUEST.into_response(),
+        );
+    }
+    if !state.verifier.verify_ingress(request.headers()) {
+        return reject(
+            &state,
+            HttpRejection::Ingress,
+            None,
+            StatusCode::FORBIDDEN.into_response(),
+        );
+    }
+    // OAuth clients discover this metadata without possessing an access token.
+    // The route is fixed at startup and discloses no capabilities or identity.
+    if request.method() == Method::GET
+        && request.uri().path() == "/.well-known/oauth-protected-resource/mcp"
+        && request.uri().query().is_none()
+    {
+        if request.headers().contains_key(header::ORIGIN) {
+            return reject(
+                &state,
+                HttpRejection::Origin,
+                None,
+                StatusCode::FORBIDDEN.into_response(),
+            );
+        }
+        return (
+            [(header::CACHE_CONTROL, "no-store")],
+            Json(state.verifier.resource_metadata()),
+        ).into_response();
+    }
+    if request.method() != Method::POST {
+        return reject(
+            &state,
+            HttpRejection::Method,
+            None,
+            StatusCode::METHOD_NOT_ALLOWED.into_response(),
         );
     }
     if request.headers().contains_key(header::ORIGIN) {
@@ -142,15 +170,15 @@ async fn require_bearer(
     let mut bearer_values = request.headers().get_all(header::AUTHORIZATION).iter();
     let authorization = bearer_values.next().and_then(|value| value.to_str().ok());
     if bearer_values.next().is_some() {
-        return reject(&state, HttpRejection::DuplicateBearer, None, unauthorized());
+        return reject(&state, HttpRejection::DuplicateBearer, None, unauthorized(&state));
     }
     let Some(authorization) = authorization else {
-        return reject(&state, HttpRejection::MissingBearer, None, unauthorized());
+        return reject(&state, HttpRejection::MissingBearer, None, unauthorized(&state));
     };
-    let caller = match state.verifier.authenticate_header(authorization) {
+    let caller = match state.verifier.authenticate_header(authorization).await {
         Ok(identity) => identity,
         Err(_) => {
-            return reject(&state, HttpRejection::InvalidBearer, None, unauthorized());
+            return reject(&state, HttpRejection::InvalidBearer, None, unauthorized(&state));
         }
     };
     // Insert only cryptographically authenticated identity into request
@@ -165,13 +193,16 @@ async fn require_bearer(
     response
 }
 
-fn unauthorized() -> Response {
+fn unauthorized(state: &RemoteHttpState) -> Response {
+    // The resource metadata URI is administrator-owned and never inferred
+    // from token claims or forwarded request headers.
+    let challenge = format!(
+        "Bearer realm=\"hostmarshal\", error=\"invalid_token\", resource_metadata=\"{}\"",
+        state.verifier.resource_metadata_url()
+    );
     (
         StatusCode::UNAUTHORIZED,
-        [(
-            header::WWW_AUTHENTICATE,
-            "Bearer realm=\"hostmarshal\", error=\"invalid_token\"",
-        )],
+        [(header::WWW_AUTHENTICATE, challenge)],
         "authentication required",
     )
         .into_response()
@@ -203,6 +234,7 @@ pub async fn serve_loopback(
         runtime: audit_runtime,
     });
     let router = Router::new()
+        .route("/.well-known/oauth-protected-resource/mcp", axum::routing::get(|| async { StatusCode::METHOD_NOT_ALLOWED }))
         .nest_service("/mcp", service)
         .layer(RequestBodyLimitLayer::new(256 * 1024))
         .layer(middleware::from_fn_with_state(state, require_bearer));
