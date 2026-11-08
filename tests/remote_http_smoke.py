@@ -235,6 +235,30 @@ def run():
                 server.wait(timeout=5)
 
         audit_text = audit.read_text()
+        events = [json.loads(line) for line in audit_text.splitlines()]
+        transport = [e for e in events if e["operation"] == "transport.mcp.http/v1"]
+        reasons = {e["reason"] for e in transport}
+        assert {
+            "http_missing_bearer", "http_invalid_bearer",
+            "http_host_rejected", "http_origin_rejected",
+            "http_method_rejected", "http_protocol_rejected",
+        }.issubset(reasons), reasons
+        unverified = [e for e in transport if e["reason"] != "http_protocol_rejected"]
+        assert unverified and all(
+            e["issuer"] == "<unverified>" and e["subject"] == "<unverified>"
+            and e["capability"] == "<transport>"
+            and e["target"] == "<unresolved>"
+            and e["phase"] == "denied"
+            for e in unverified
+        ), unverified
+        protocol_denials = [
+            e for e in transport if e["reason"] == "http_protocol_rejected"
+        ]
+        assert protocol_denials and all(
+            e["subject"] == "operator-a" and e["issuer"] == ISSUER
+            and e["phase"] == "denied" for e in protocol_denials
+        )
+        assert len({e["requestId"] for e in transport}) == len(transport)
         assert "operator-a" in audit_text
         assert "operator-b" in audit_text
         assert valid not in audit_text

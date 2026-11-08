@@ -25,7 +25,7 @@ use tower_http::limit::RequestBodyLimitLayer;
 
 use crate::{
     dynamic_mcp::DeclarativeMcp, identity::AuthenticatedCaller, remote_auth::RemoteJwtVerifier,
-    runtime::ExecutionCoordinator,
+    runtime::{ExecutionCoordinator, HttpRejection},
 };
 
 #[derive(Clone)]
@@ -81,43 +81,86 @@ impl ServerHandler for AuthenticatedRemoteMcp {
     }
 }
 
+#[derive(Clone)]
+struct RemoteHttpState {
+    verifier: Arc<RemoteJwtVerifier>,
+    runtime: Arc<ExecutionCoordinator>,
+}
+
+fn reject(
+    state: &RemoteHttpState,
+    reason: HttpRejection,
+    caller: Option<&AuthenticatedCaller>,
+    response: Response,
+) -> Response {
+    // This is a mandatory transport-level denial record. Never leak an audit
+    // sink error or an unverified JWT claim to a remote client.
+    if state.runtime.audit_http_denial(reason, caller).is_err() {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    }
+    response
+}
+
 async fn require_bearer(
-    State(verifier): State<Arc<RemoteJwtVerifier>>,
+    State(state): State<Arc<RemoteHttpState>>,
     mut request: Request,
     next: Next,
 ) -> Response {
     // HTTP is intentionally loopback-only; TLS must be enforced by a locally
     // controlled reverse proxy. Never accept X-Forwarded-* as identity.
     if request.method() != Method::POST {
-        return StatusCode::METHOD_NOT_ALLOWED.into_response();
+        return reject(
+            &state,
+            HttpRejection::Method,
+            None,
+            StatusCode::METHOD_NOT_ALLOWED.into_response(),
+        );
     }
     let host = request
         .headers()
         .get(header::HOST)
         .and_then(|v| v.to_str().ok());
-    if host != Some(verifier.allowed_host()) {
-        return StatusCode::BAD_REQUEST.into_response();
+    if host != Some(state.verifier.allowed_host()) {
+        return reject(
+            &state,
+            HttpRejection::Host,
+            None,
+            StatusCode::BAD_REQUEST.into_response(),
+        );
     }
     if request.headers().contains_key(header::ORIGIN) {
         // Browser access is not supported; avoid cross-origin bearer misuse.
-        return StatusCode::FORBIDDEN.into_response();
+        return reject(
+            &state,
+            HttpRejection::Origin,
+            None,
+            StatusCode::FORBIDDEN.into_response(),
+        );
     }
     let mut bearer_values = request.headers().get_all(header::AUTHORIZATION).iter();
     let authorization = bearer_values.next().and_then(|value| value.to_str().ok());
     if bearer_values.next().is_some() {
-        return unauthorized();
+        return reject(&state, HttpRejection::DuplicateBearer, None, unauthorized());
     }
     let Some(authorization) = authorization else {
-        return unauthorized();
+        return reject(&state, HttpRejection::MissingBearer, None, unauthorized());
     };
-    let caller = match verifier.authenticate_header(authorization) {
+    let caller = match state.verifier.authenticate_header(authorization) {
         Ok(identity) => identity,
-        Err(_) => return unauthorized(),
+        Err(_) => {
+            return reject(&state, HttpRejection::InvalidBearer, None, unauthorized());
+        }
     };
-    // Insert an authenticated identity into HTTP request extensions. rmcp's
-    // HTTP transport carries it into each JSON-RPC request's RequestContext.
-    request.extensions_mut().insert(caller);
-    next.run(request).await
+    // Insert only cryptographically authenticated identity into request
+    // extensions, never raw token contents, issuer hints or proxy headers.
+    request.extensions_mut().insert(caller.clone());
+    let response = next.run(request).await;
+    // The SDK/body-size layer may reject malformed routing or JSON-RPC before
+    // the execution coordinator is called. Audit that protocol rejection too.
+    if response.status().is_client_error() || response.status().is_server_error() {
+        return reject(&state, HttpRejection::Protocol, Some(&caller), response);
+    }
+    response
 }
 
 fn unauthorized() -> Response {
@@ -141,6 +184,7 @@ pub async fn serve_loopback(
         address.ip().is_loopback(),
         "remote HTTP listener must bind loopback only"
     );
+    let audit_runtime = Arc::clone(&runtime);
     let service = StreamableHttpService::new(
         move || {
             Ok(AuthenticatedRemoteMcp {
@@ -152,10 +196,14 @@ pub async fn serve_loopback(
             .with_legacy_session_mode(false)
             .with_json_response(true),
     );
+    let state = Arc::new(RemoteHttpState {
+        verifier,
+        runtime: audit_runtime,
+    });
     let router = Router::new()
         .nest_service("/mcp", service)
         .layer(RequestBodyLimitLayer::new(256 * 1024))
-        .layer(middleware::from_fn_with_state(verifier, require_bearer));
+        .layer(middleware::from_fn_with_state(state, require_bearer));
 
     let listener = tokio::net::TcpListener::bind(address).await?;
     axum::serve(listener, router).await?;
