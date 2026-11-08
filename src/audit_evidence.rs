@@ -170,12 +170,11 @@ impl EvidenceFileAudit {
             Err(error) => return Err(error),
         };
         let checkpoint = verify(path, None)?;
-        let decoded = <[u8; 32]>::try_from(
-            (0..32)
-                .map(|i| u8::from_str_radix(&checkpoint.head[i * 2..i * 2 + 2], 16).unwrap())
-                .collect::<Vec<_>>(),
-        )
-        .map_err(|_| bad("invalid internal checkpoint"))?;
+        let mut decoded = [0_u8; 32];
+        for (index, byte) in decoded.iter_mut().enumerate() {
+            *byte = u8::from_str_radix(&checkpoint.head[index * 2..index * 2 + 2], 16)
+                .map_err(|_| bad("invalid internal checkpoint"))?;
+        }
         Ok(Self {
             writer: Mutex::new(Writer {
                 file,
