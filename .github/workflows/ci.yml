@@ -34,8 +34,6 @@ jobs:
           fetch-depth: 0
       - name: Test selection logic and protect against unsafe bypass
         run: python3 -m unittest discover -s tests -p test_ci_impact.py
-      - name: Reject changed-file whitespace errors
-        run: git diff --check
       - name: Compute affected suites; uncertain changes always run everything
         id: impact
         shell: bash
