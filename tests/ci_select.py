@@ -62,15 +62,30 @@ def classify(paths):
             result["oauth"] = True
             result["k3s"] = True
             continue
-        if path.startswith(("src/audit", "tests/audit_", "src/main.rs", "src/runtime")):
+        if path.startswith((
+            "src/audit", "tests/audit_", "src/main.rs", "src/runtime",
+            "src/adapter.rs", "src/authorization.rs", "src/identity.rs",
+            "src/dynamic_mcp.rs", "src/lib.rs",
+        )):
             result["core"] = True
             result["vault"] = True
             result["oauth"] = True
             result["k3s"] = True
             continue
-        if path.startswith(("src/", "tests/", "examples/", "scripts/")):
+        if path.startswith(("src/observation.rs", "src/transport.rs", "tests/transport_")):
+            result["core"] = True
+            result["vault"] = True
+            continue
+        if path.startswith(("tests/mcp_", "tests/policy_", "tests/reload_")):
             result["core"] = True
             continue
+        if path.startswith(("examples/",)):
+            result["core"] = True
+            continue
+        # A new or unclassified source/test/script may carry any privilege
+        # boundary. Treat it as security-affecting until maintainers classify it.
+        if path.startswith(("src/", "tests/", "scripts/")):
+            return ALL.copy()
         # Unrecognized project assets should never accidentally skip tests.
         return ALL.copy()
     return result
