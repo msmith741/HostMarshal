@@ -111,6 +111,10 @@ M4 additionally includes an **isolated three-node K3s** integration workflow tha
 
 The scoped Vault SSH signer also supports an **opt-in JWT workload identity source**, alongside the existing mutually exclusive operator-token and AppRole modes. It accepts an administrator-fixed Vault JWT login role and protected externally issued assertion, then verifies the resulting short-lived Vault lease's exact signing-only policy. The JWT is authenticated by Vault with configured issuer keys and bound claims; HostMarshal neither supplies an identity provider nor interprets a workload JWT as MCP caller authority. It works outside Kubernetes. See the [workload JWT integration guide](docs/WORKLOAD_JWT_AUTH.md) and [ADR-0015](docs/adr/0015-issuer-neutral-jwt-workload-auth.md). M4 remains experimental; FR-032/033 add proactive idle renewal and explicit operator recovery, while production identity provisioning and security review remain open.
 
+### Optional bounded audit delivery (experimental)
+
+Both stdio and loopback HTTP launchers can opt into a **bounded, acknowledged, fail-closed audit dispatcher** using a protected `--audit-delivery-config` JSON file. Events are handed to a single writer thread and are committed only when the existing sink acknowledges them; timeout, backpressure or writer failure latches the dispatcher unavailable. The default audit behavior is unchanged when this option is omitted. This does not replace the independent durable/tamper-evident audit service required for production. See [operator guide](docs/AUDIT_DELIVERY.md), [ADR-0018](docs/adr/0018-bounded-audit-dispatch.md) and FR-035 traceability.
+
 ### Proactive Vault signing-lease renewal (experimental)
 
 Vault lease maintenance audit is being extended to correlate each renewal and operator-approved recovery with redacted precommit and terminal events under the same trusted sink used by MCP execution. Missing audit commitments fail closed and quarantine the signer. This is **in-process** audit coverage, not independently immutable evidence or a production deployment gate. See [audit guidance](docs/AUDIT.md) and [ADR-0017](docs/adr/0017-audited-vault-lifecycle.md).

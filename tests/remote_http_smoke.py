@@ -114,11 +114,19 @@ def run():
         }))
         auth.chmod(0o600)
         audit = root / "audit.jsonl"
+        delivery = root / "audit-delivery.json"
+        delivery.write_text(json.dumps({
+            "apiVersion": "hostmarshal.io/audit-delivery/v1alpha1",
+            "queueCapacity": 64,
+            "ackTimeoutMs": 5000,
+        }))
+        delivery.chmod(0o600)
 
         command = [
             str(BIN), "http", "--listen", f"127.0.0.1:{port}",
             "--config-dir", str(config), "--auth-config", str(auth),
             "--audit-log", str(audit),
+            "--audit-delivery-config", str(delivery),
         ]
         server = subprocess.Popen(
             command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,

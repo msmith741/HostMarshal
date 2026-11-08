@@ -2,6 +2,7 @@
 //! Only vetted read-only host observations are available in pre-alpha.
 pub mod adapter;
 pub mod audit;
+pub mod audit_delivery;
 pub mod authorization;
 pub mod credentials;
 pub mod declarative;
