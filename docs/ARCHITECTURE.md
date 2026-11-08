@@ -1,11 +1,11 @@
 # Proposed architecture
 
-**Status:** accepted ADR-0003–0008 and ADR-0011 design principles; M3 adds two audited, bounded real observation adapters. Arbitrary remote execution, writes, remote MCP authentication and external plugins remain unavailable. **Design goal:** transport independence, declarative capabilities, and security boundaries that apply to every adapter.
+**Status:** accepted ADR-0003–0008 and ADR-0011 design principles; M3 adds two audited, bounded real observation adapters. M4 introduces experimental, JWT-authenticated loopback MCP HTTP and a provider router; externally exposed TLS, full OIDC federation, Vault and plugins remain unfinished. Arbitrary remote execution and writes are prohibited. **Design goal:** transport independence, declarative capabilities, and security boundaries that apply to every adapter.
 
 ## Logical diagram
 
 ~~~text
-MCP stdio / future authenticated MCP HTTP / native CLI
+MCP stdio / authenticated loopback MCP HTTP pilot / native CLI
                            |
                  Transport + identity binding
                            |

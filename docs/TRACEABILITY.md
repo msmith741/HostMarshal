@@ -9,14 +9,14 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 | FR-001 YAML resources | ADR-0003 | `src/declarative.rs`, `src/schema.rs`, `config/v1alpha1/` | `declarative::tests`, `tests/declarative_smoke.py` | In progress — explicit parser budgets, generated Draft 2020-12 schema export, stable effective snapshot digest; checked-in versioned schema and independent conformance implemented; atomic reload and emergency denial available in local Unix mode |
 | FR-002 dynamic capabilities | ADR-0004, ADR-0011 | `src/declarative.rs`, `src/adapter.rs`, `src/dynamic_mcp.rs` | two-capabilities unit/smoke; M3 schema/transport integration | Implemented for three vetted built-in operations; arbitrary plugins still prohibited |
 | FR-003 separation of authorities | ADR-0005 | fixed trusted built-in registry; capability and grant YAML separate | privilege override and denied invocation tests | In progress — deployment lifecycle RBAC not implemented |
-| FR-004 caller identity | ADR-0007 | `src/identity.rs`, `src/main.rs` | identity unit tests, denied-caller runtime/MCP tests | Implemented for trusted local stdio; OIDC/mTLS deferred (M4) |
+| FR-004 caller identity | ADR-0007, ADR-0012 | `src/identity.rs`, `src/remote_auth.rs`, `src/remote_http.rs`, `src/main.rs` | identity, HTTPS issuer validation, JWT/HTTP integration tests | M4 partial — verified JWT-based loopback HTTP identity and trusted stdio; full OIDC metadata/rotation and mTLS pending |
 | FR-005 target resolution/deny | ADR-0004, ADR-0005, ADR-0007 | `src/declarative.rs` | denied target, no-grant and invalid capability tests | In progress — name-only selector subset |
 | FR-006 central execution | ADR-0002, ADR-0006, ADR-0007 | `src/runtime.rs`, `src/authorization.rs`, `src/adapter.rs`, `src/dynamic_mcp.rs` | runtime unit tests (including lockdown and exhausted capacity), MCP audit and legacy-mode retirement smoke | Implemented for all supported declarative MCP tools; no unaudited legacy path |
 | FR-007 bounded observations | ADR-0006, ADR-0011 | `src/adapter.rs`, `src/observation.rs`, `src/runtime.rs` | integration `tests/transport_smoke.py`, runtime deadlines, negative-path tests | M3 fixed Linux uname/HTTPS health built-ins implemented; no generic commands/URLs |
 | FR-008 credential brokerage | ADR-0008, ADR-0011 | `src/credentials.rs`, `src/runtime.rs` | broker unit tests, M3 protected mapping/denial integration | Scoped async broker plus M3 optional protected local target-key mapping; remote/short-lived providers deferred (M4) |
 | FR-009 audit records | ADR-0008 | `src/audit.rs`, `src/runtime.rs`, `--audit-log` CLI | runtime audit failure/redaction tests, `tests/audit_smoke.py` | Implemented for static MCP invocations; persistence optional, no tamper evidence |
 | FR-010 offline CLI validation/explain | ADR-0003, ADR-0007 | `src/main.rs`, `src/authorization.rs` | `tests/declarative_smoke.py`, `tests/policy_explain_smoke.py` | Implemented for offline validate/inspect/schema and trusted-local policy explain; config render pending |
-| FR-011 MCP compatibility | ADR-0009 | `src/dynamic_mcp.rs`, `src/main.rs` | `tests/mcp_smoke.py`, `tests/mcp_modern_smoke.py` | Legacy and stateless stdio wire conformance preserved through the single M2 runtime; HTTP deferred |
+| FR-011 MCP compatibility | ADR-0009, ADR-0012 | `src/dynamic_mcp.rs`, `src/remote_http.rs`, `src/main.rs` | legacy and stateless stdio suites; `tests/remote_http_smoke.py` | HTTP stateless pilot in progress; comprehensive OAuth/protocol conformance pending |
 | FR-012 isolated plugins | ADR-0006 | Not implemented | Planned sandbox tests | Planned (M5) |
 | FR-013 schema conformance | ADR-0003 | `src/schema.rs`, `schemas/v1alpha1/` | `tests/schema_conformance.py`, schema drift CI | Implemented (tested) |
 | FR-014 atomic activation and revocation | ADR-0003, ADR-0005, ADR-0011 | `src/snapshot.rs`, `src/main.rs`, `src/runtime.rs` | snapshot unit tests, `tests/reload_smoke.py`, M3 transport deadlines | New requests revoked; in-flight network effects and remote SSH work not guaranteed cancellable |
@@ -34,7 +34,7 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 | 0004 | Accepted | dynamic MCP discovery for one trusted operation | richer signed registry and robust schema subtyping |
 | 0005 | Accepted | separate capability and grant resources; no write MCP tools | admin installation/publication workflows and authorization |
 | 0006 | Accepted | trusted typed built-in adapter registry; no external runtime plugins | public adapter SDK and OS-isolated plugin supervisor |
-| 0007 | Accepted | launcher identity and issuer-scoped grant authorization | remote cryptographic caller verification |
+| 0007 | Accepted | launcher identity and issuer-scoped grant authorization; M4 static-JWKS access-token verifier | comprehensive remote identity federation and rotation |
 | 0008 | Accepted | precommit/terminal audit, async broker scope, local SSH key map | protected remote broker and tamper-evident audit |
 | 0011 | Accepted | fixed OpenSSH uname/HTTPS health, validated target transports and trusted schemas | endpoint egress hardening and broader approved operations |
 
@@ -86,7 +86,7 @@ Status definitions: **Implemented (tested)** means corresponding unit/integratio
 ## M4 in-progress evidence
 
 - **Provider routing foundation:** `src/provider_router.rs` rejects duplicate or malformed operation/target/purpose routes, missing routes, cross-target and cross-operation requests, mismatched returned leases and unavailable providers. Provider failures never cause fallback to a broader credential source.
-- **Not yet implemented:** remote authenticated Streamable HTTP, issuer/audience/JWKS validation, Vault-issued SSH user certificates, lease expiry/revocation, and hypervisor adapter. **No M4 completion claim** is made. See [M4 implementation plan](M4_IMPLEMENTATION_PLAN.md) and [ADR-0012](adr/0012-m4-remote-identity-and-credential-providers.md).
+- **Implemented in M4 pilot:** per-request signed JWT identity and stateless loopback HTTP, with canonical HTTPS issuer support in grant validation. **Not implemented:** online JWKS refresh, OAuth metadata, Vault-issued SSH user certificates, lease expiry/revocation, and hypervisor adapter. **No M4 completion claim** is made. See [M4 implementation plan](M4_IMPLEMENTATION_PLAN.md) and [ADR-0012](adr/0012-m4-remote-identity-and-credential-providers.md).
 
 ## M4 in-progress security evidence
 

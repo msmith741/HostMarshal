@@ -484,16 +484,24 @@ impl CompiledConfig {
 mod tests {
     #[test]
     fn grant_issuers_allow_only_trusted_local_or_canonical_https() {
-        for good in ["local://trusted-launcher", "https://issuer.example.invalid/"] {
+        for good in [
+            "local://trusted-launcher",
+            "https://issuer.example.invalid/",
+        ] {
             assert!(super::valid_issuer(good), "{good}");
         }
-        for bad in ["http://issuer.example.invalid/", "https://user@issuer.example.invalid/",
-                    "https://issuer.example.invalid/#fragment", "https://issuer.example.invalid/?token=x",
-                    "https://issuer.example.invalid", "local://untrusted", ""] {
+        for bad in [
+            "http://issuer.example.invalid/",
+            "https://user@issuer.example.invalid/",
+            "https://issuer.example.invalid/#fragment",
+            "https://issuer.example.invalid/?token=x",
+            "https://issuer.example.invalid",
+            "local://untrusted",
+            "",
+        ] {
             assert!(!super::valid_issuer(bad), "{bad}");
         }
     }
-
 
     use super::*;
 
