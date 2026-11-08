@@ -58,9 +58,13 @@ spec:
               sed "s|@@INGRESS_PROOF@@|${proof}|g" /nginx-template/default.conf > /nginx-generated/default.conf
               chmod 0644 /nginx-generated/default.conf
           securityContext:
+            runAsUser: 0
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
+              # Required only in the one-shot init to chown 0600 trust files
+              # for UID 10001. Both long-running containers retain drop: ALL.
+              add: [CHOWN]
           volumeMounts:
             - name: identity
               mountPath: /identity

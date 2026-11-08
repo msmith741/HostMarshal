@@ -77,7 +77,9 @@ jobs:
           kubectl get nodes -o wide || true
           kubectl -n hostmarshal-ci get deploy,pods,svc,networkpolicy || true
           kubectl -n kube-system get pods -l app.kubernetes.io/name=traefik || true
-          # No Pod logs or Kubernetes Secret contents; may include ingress proof.
+          # The init command contains no echo/xtrace and does not print proofs.
+          kubectl -n hostmarshal-ci logs deployment/hostmarshal -c prepare-protected-config --tail=30 || true
+          # Never print server logs or Kubernetes Secret values.
       - name: Destroy disposable K3s cluster
         if: always()
         run: k3d cluster delete hostmarshal-m4-ci || true
