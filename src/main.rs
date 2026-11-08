@@ -53,7 +53,7 @@ async fn main() -> Result<()> {
             let expected = match opts {
                 [] => None,
                 [flag, head] if flag == "--expected-head" => Some(head.as_str()),
-                _ => bail!("usage: hostmarshal audit verify <path> [--expected-head <hex>]")
+                _ => bail!("usage: hostmarshal audit verify <path> [--expected-head <hex>]"),
             };
             let head = audit_evidence::verify(Path::new(path), expected)?;
             println!("{}", serde_json::to_string_pretty(&head)?);
