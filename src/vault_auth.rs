@@ -308,6 +308,8 @@ fn recovery_epoch(path: &Path) -> Result<u64> {
             directory = directory.parent().context("missing recovery path ancestor")?;
         }
     }
+    #[cfg(not(unix))]
+    anyhow::bail!("trusted recovery epoch control requires Unix file ownership");
     let content = fs::read_to_string(path).context("recovery epoch unreadable")?;
     let value = content.trim_end_matches(['\n', '\r']);
     if value.is_empty()
@@ -387,6 +389,9 @@ impl LeaseLifecycle {
             State::Quarantined(previous) => {
                 let current = observed_epoch(self.recovery_epoch_file.as_ref());
                 if !matches!((previous, current), (Some(old), Some(new)) if new > old) {
+                    // Failed or non-monotonic reads must NOT lower the
+                    // baseline for a subsequent recovery attempt.
+                    *state = State::Quarantined(previous);
                     return Err(BrokerFailure::Denied);
                 }
                 // The marker was already consumed by the replacement state.
