@@ -97,11 +97,15 @@ def main():
 
             api("POST", "sys/mounts/ssh", {"type": "ssh"}, root_token)
             ca_result = api(
-                "POST", "ssh/config/ca", {"generate_signing_key": True},
+                "POST", "ssh/config/ca",
+                {"generate_signing_key": True, "key_type": "ed25519"},
                 root_token,
             )
             ssh_ca = root / "ssh_ca.pub"
             ssh_ca.write_text(ca_result["data"]["public_key"].strip() + "\n")
+            assert ssh_ca.read_text().startswith("ssh-ed25519 "), (
+                "real Vault fixture must use independently pinned Ed25519 CA"
+            )
 
             api("POST", "ssh/roles/read-only", {
                 "key_type": "ca",

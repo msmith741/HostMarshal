@@ -16,7 +16,7 @@ use anyhow::{Context, Result, ensure};
 use reqwest::{Client, Url, header::HeaderValue};
 use serde::Deserialize;
 use serde_json::json;
-use ssh_key::{Certificate, HashAlg, PublicKey, certificate::CertType};
+use ssh_key::{Algorithm, Certificate, HashAlg, PublicKey, certificate::CertType};
 use tokio::process::Command;
 
 use crate::{
@@ -142,6 +142,13 @@ impl VaultSshCertificateBroker {
         check_public_trust_file(&spec.ssh_ca_public_key_file)
             .context("untrusted SSH signing CA file")?;
         let public_ca = PublicKey::read_openssh_file(&spec.ssh_ca_public_key_file)?;
+        // Only Ed25519 SSH CA signature verification is compiled into this
+        // pre-alpha build. Reject other CA algorithms at startup instead of
+        // appearing configured but rejecting every issued certificate.
+        ensure!(
+            public_ca.algorithm() == Algorithm::Ed25519,
+            "Vault SSH signing CA must be Ed25519"
+        );
         let signing_ca = public_ca.fingerprint(HashAlg::Sha256);
 
         let mut bindings = BTreeMap::new();
