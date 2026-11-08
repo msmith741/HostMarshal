@@ -271,11 +271,17 @@ async fn read(response: reqwest::Response, policy: &str) -> Result<Lease, Broker
 /// Operator-owned counter used ONLY for release from sticky quarantine.
 /// This is not an authentication credential, and a changed epoch never bypasses
 /// Vault policy, issuer or SSH certificate verification.
+#[cfg(not(unix))]
+fn recovery_epoch(_path: &Path) -> Result<u64> {
+    anyhow::bail!("trusted recovery epoch control requires Unix file ownership");
+}
+
+#[cfg(unix)]
 fn recovery_epoch(path: &Path) -> Result<u64> {
     use anyhow::{Context, bail};
     let metadata = fs::symlink_metadata(path).context("recovery epoch cannot be inspected")?;
     ensure!(
-        path.is_absolute() && metadata.file_type().is_file() && metadata.len() <= 20,
+        path.is_absolute() && metadata.file_type().is_file() && metadata.len() <= 22,
         "recovery epoch must be an absolute, small regular file"
     );
     ensure!(
@@ -310,8 +316,6 @@ fn recovery_epoch(path: &Path) -> Result<u64> {
                 .context("missing recovery path ancestor")?;
         }
     }
-    #[cfg(not(unix))]
-    anyhow::bail!("trusted recovery epoch control requires Unix file ownership");
     let content = fs::read_to_string(path).context("recovery epoch unreadable")?;
     let value = content.trim_end_matches(['\n', '\r']);
     if value.is_empty()
@@ -638,11 +642,15 @@ mod tests {
         fs::write(&path, "4\n").unwrap();
         #[cfg(unix)]
         {
-            use std::os::unix::fs::{PermissionsExt, symlink};
+            use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
             fs::set_permissions(&path, fs::Permissions::from_mode(0o400)).unwrap();
-            // A same-UID read-only file can be chmod'ed and replaced by the
-            // runtime principal and MUST NOT authorize recovery.
-            assert!(recovery_epoch(&path).is_err());
+            // A same-UID non-root 0400 file is mutable by the runtime user;
+            // root-owned protected fixtures are the valid administrator case.
+            if fs::metadata(&path).unwrap().uid() == 0 {
+                assert_eq!(recovery_epoch(&path).unwrap(), 4);
+            } else {
+                assert!(recovery_epoch(&path).is_err());
+            }
             let link = dir.path().join("alias");
             symlink("epoch", &link).unwrap();
             assert!(recovery_epoch(&link).is_err());
