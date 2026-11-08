@@ -100,3 +100,7 @@ Licensed under [Apache 2.0](LICENSE).
 ### Production-shaped ingress and real OAuth CI
 
 M4 now has an additional **disposable** CI topology with real Keycloak machine-to-machine client-credentials access tokens, pinned OIDC discovery and a Traefik TLS-only proxy sharing its network namespace with a loopback-only HostMarshal backend. See [the ingress/OAuth test guide](docs/INGRESS_OAUTH_CI.md). It is not a deployed production service; do not merge M4 without the remaining release review and actual site isolation checks.
+
+### Disposable K3s integration and network-isolation CI
+
+M4 additionally includes an **isolated three-node K3s** integration workflow that runs bundled Traefik, Flannel and actual NetworkPolicy enforcement. It creates a CI-only, loopback-bound HostMarshal Pod with a private NGINX ingress sidecar, authenticates TLS MCP requests, blocks unauthorized Service/PodIP traffic from another worker, and verifies a deliberately permissive policy opens the path and that removing it closes the path again. All material is ephemeral; no homelab kubeconfig, Service, Argo sync, Vault or firewall is accessed. See [K3s integration guide](docs/K3S_INTEGRATION_CI.md) and [ADR-0014](docs/adr/0014-disposable-k3s-isolation-acceptance.md). Production k3s/Traefik configuration and actual network isolation still require independent review.

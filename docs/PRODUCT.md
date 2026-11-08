@@ -45,6 +45,9 @@ HostMarshal provides **typed, authorized, auditable infrastructure operations** 
 | FR-025 | Require authenticated local reverse-proxy attestation for ingress mode (HTTPS scheme, exact public Host, protected proof) and deny direct-backend bypass, with sanitized audit | M4 |
 | FR-026 | Verify administrator-pinned OAuth/OIDC authorization-server discovery over trusted HTTPS at startup, including exact issuer, JWKS URI, endpoint origin, and supported machine-client grant; reject mismatched metadata | M4 |
 | FR-027 | Test a production-shaped TLS reverse proxy and isolated MCP backend against a real OAuth issuer, covering token acquisition, issuer/audience/scope checks, TLS trust and network bypass via independent CI | M4 |
+| FR-028 | Validate real K3s multi-node Flannel, K3s-managed Traefik, and an isolated local-only HostMarshal deployment in disposable CI without any private cluster access | M4 |
+| FR-029 | Maintain HostMarshal loopback binding inside an unprivileged Kubernetes Pod sidecar boundary, with TLS public Host routing, protected ingress attestation and a ClusterIP-only service | M4 |
+| FR-030 | Prove cross-node/namespace NetworkPolicy isolation with positive connectivity controls, a deliberately unsafe additive-policy positive control, and restored denial after rollback | M4 |
 
 ## Non-functional requirements
 
