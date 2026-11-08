@@ -48,6 +48,7 @@ HostMarshal provides **typed, authorized, auditable infrastructure operations** 
 | FR-028 | Validate real K3s multi-node Flannel, K3s-managed Traefik, and an isolated local-only HostMarshal deployment in disposable CI without any private cluster access | M4 |
 | FR-029 | Maintain HostMarshal loopback binding inside an unprivileged Kubernetes Pod sidecar boundary, with TLS public Host routing, protected ingress attestation and a ClusterIP-only service | M4 |
 | FR-030 | Prove cross-node/namespace NetworkPolicy isolation with positive connectivity controls, a deliberately unsafe additive-policy positive control, and restored denial after rollback | M4 |
+| FR-031 | Authenticate optional Vault SSH-signing workloads using an administrator-selected, externally issued JWT and Vault's role-bound JWT auth method; pin Vault TLS, require exclusive credential source and exact renewable lease policy, quarantine on failure, and do not expose or log tokens | M4 |
 
 ## Non-functional requirements
 
