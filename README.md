@@ -113,4 +113,6 @@ The scoped Vault SSH signer also supports an **opt-in JWT workload identity sour
 
 ### Proactive Vault signing-lease renewal (experimental)
 
+Vault lease maintenance audit is being extended to correlate each renewal and operator-approved recovery with redacted precommit and terminal events under the same trusted sink used by MCP execution. Missing audit commitments fail closed and quarantine the signer. This is **in-process** audit coverage, not independently immutable evidence or a production deployment gate. See [audit guidance](docs/AUDIT.md) and [ADR-0017](docs/adr/0017-audited-vault-lifecycle.md).
+
 Renewable Vault AppRole and external JWT signing tokens can now be proactively maintained after an authorized operation, without needing regular MCP traffic. This is a provider-level, process-owned worker that renews the same restricted Vault service token and quarantines on failure—no fallback or silent re-login. An **optional operator-controlled Unix recovery epoch** authorizes only a fresh validated Vault login when an administrator increments a root-owned protected marker; by default, recovery still requires a trusted restart. See [lease lifecycle guide](docs/VAULT_LEASE_LIFECYCLE.md), [ADR-0016](docs/adr/0016-vault-proactive-renewal-recovery.md), and FR-032/FR-033 traceability. No Kubernetes or identity-provider-specific control is required.
