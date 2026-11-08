@@ -849,6 +849,85 @@ mod tests {
         assert!(matches!(state, State::Quarantined(Some(101))));
     }
 
+    struct UnavailableAudit;
+    impl AuditSink for UnavailableAudit {
+        fn record(&self, _event: &AuditEvent) -> std::io::Result<()> {
+            Err(std::io::Error::other("injected audit failure"))
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingAudit {
+        events: StdMutex<Vec<AuditEvent>>,
+    }
+    impl AuditSink for RecordingAudit {
+        fn record(&self, event: &AuditEvent) -> std::io::Result<()> {
+            self.events.lock().unwrap().push(event.clone());
+            Ok(())
+        }
+    }
+
+    fn test_lifecycle(audit: Arc<dyn AuditSink>) -> Arc<LeaseLifecycle> {
+        Arc::new(LeaseLifecycle {
+            state: Arc::new(Mutex::new(State::Cold)),
+            policy: "sign-only".to_owned(),
+            renew_url: Url::parse("http://127.0.0.1:9/v1/auth/token/renew-self").unwrap(),
+            renew_before: Duration::from_secs(15),
+            recovery_epoch_file: None,
+            audit,
+            audit_sequence: AtomicU64::new(0),
+            worker: StdMutex::new(None),
+        })
+    }
+
+    #[tokio::test]
+    async fn renewal_audit_precommit_failure_prevents_network_and_denies_token() {
+        let lifecycle = test_lifecycle(Arc::new(UnavailableAudit));
+        let lease = Lease {
+            client_token: "SENSITIVE-SIGNER-TOKEN".to_owned(),
+            renewable: true,
+            lease_duration: 30,
+            policies: vec![],
+            token_policies: vec![],
+            identity_policies: vec![],
+        };
+        let result = lifecycle
+            .audited_renew(&Client::new(), Active::from_lease(&lease, Duration::from_secs(15)))
+            .await;
+        assert!(matches!(result, Err(BrokerFailure::Unavailable)));
+    }
+
+    #[test]
+    fn maintenance_audit_fields_are_fixed_redacted_and_correlated() {
+        let sink = Arc::new(RecordingAudit::default());
+        let lifecycle = test_lifecycle(sink.clone());
+        let id = lifecycle.maintenance_id();
+        let op = "vault.signing-lease.renew/v1";
+        lifecycle
+            .maintenance_event(&id, op, AuditPhase::Authorized, "renew_started")
+            .unwrap();
+        lifecycle
+            .maintenance_event(&id, op, AuditPhase::Failed, "renew_failed")
+            .unwrap();
+        let events = sink.events.lock().unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].request_id, events[1].request_id);
+        assert_eq!(events[0].issuer, "<system>");
+        assert_eq!(events[0].subject, "<system>");
+        assert_eq!(events[0].target, "<provider>");
+        assert_eq!(events[1].phase, AuditPhase::Failed);
+        let json = serde_json::to_string(&*events).unwrap();
+        for sensitive in [
+            "SENSITIVE-SIGNER-TOKEN",
+            "secret_id",
+            "jwt_file",
+            "http://127.0.0.1:9",
+            "sign-only",
+        ] {
+            assert!(!json.contains(sensitive));
+        }
+    }
+
     #[test]
     fn proactive_schedule_has_minimum_ttl_fraction() {
         let lease = Lease {
