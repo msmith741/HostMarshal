@@ -446,8 +446,8 @@ mod tests {
             keys: BTreeMap::new(),
             online: None,
             ingress: None,
-            metadata_url:
-                "https://mcp.example.invalid/.well-known/oauth-protected-resource/mcp".to_owned(),
+            metadata_url: "https://mcp.example.invalid/.well-known/oauth-protected-resource/mcp"
+                .to_owned(),
         };
         for header in ["", "Basic anything", "Bearer ", "Bearer a/b", "bearer abc"] {
             assert!(verifier.authenticate_header(header).await.is_err());

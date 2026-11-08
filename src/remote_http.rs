@@ -212,7 +212,7 @@ fn unauthorized(state: &RemoteHttpState) -> Response {
     // The resource metadata URI is administrator-owned and never inferred
     // from token claims or forwarded request headers.
     let challenge = format!(
-        "Bearer realm=\"hostmarshal\", error=\"invalid_token\", resource_metadata=\"{}\"",
+        "Bearer realm=\"hostmarshal\", error=\"invalid_token\", resource_metadata=\"{}\", scope=\"hostmarshal.observe\"",
         state.verifier.resource_metadata_url()
     );
     (
