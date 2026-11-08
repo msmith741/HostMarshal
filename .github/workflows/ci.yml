@@ -54,6 +54,21 @@ jobs:
           .remote-auth-venv/bin/pip install --disable-pip-version-check -q 'PyJWT==2.10.1' 'cryptography==46.0.3'
           .remote-auth-venv/bin/python tests/remote_http_smoke.py
 
+  vault-real:
+    name: Real Vault TLS SSH signer interoperability
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce locked build
+        run: cargo build --locked --bin hostmarshal
+      - name: Install disposable OpenSSH test server
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server
+      - name: Run TLS real-Vault signing and revocation test
+        run: python3 tests/vault_real_smoke.py
+
   fuzz-smoke:
     name: Coverage-guided fuzz target smoke
     runs-on: ubuntu-latest
