@@ -1,6 +1,6 @@
 # Security architecture and threat model
 
-**Status:** security architecture covers M1/M2 enforcement and M3 vetted SSH/HTTPS observation controls, alongside **unimplemented** privileged/remote transport security requirements. Do not infer production assurance from this document. For disclosure see [SECURITY.md](../SECURITY.md).
+**Status:** security architecture covers M1/M2 enforcement, M3 restricted SSH/HTTPS observations and M4 JWT-authenticated loopback HTTP plus experimental Vault SSH certificate issuance; production remote transport hardening remains **unimplemented**. Do not infer production assurance from this document. For disclosure see [SECURITY.md](../SECURITY.md).
 
 ## Assets and adversaries
 

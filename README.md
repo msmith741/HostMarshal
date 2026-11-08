@@ -4,7 +4,7 @@
 
 HostMarshal is a vendor-neutral, pre-alpha Rust infrastructure capability gateway. It supports MCP over stdio, versioned YAML capabilities, and a centralized audited execution coordinator for vetted inventory, Linux SSH and HTTPS observations.
 
-> **Pre-alpha.** M4 adds an optional loopback-only, JWT-authenticated Streamable HTTP MCP entrypoint. See [remote MCP security](docs/REMOTE_MCP.md). It is not a production-ready remote service. M3 adds fixed Linux `uname -s` over pinned-host-key SSH and a fixed HTTPS `/health` GET. There is **no** generic remote command, arbitrary URL, mutation, external plugin, remote MCP authentication, short-lived secret issuance or tamper-evident audit. Use a dedicated minimally privileged OS/SSH identity and trusted configuration.
+> **Pre-alpha.** M4 adds an optional loopback-only, JWT-authenticated Streamable HTTP MCP entrypoint. See [remote MCP security](docs/REMOTE_MCP.md). It is not a production-ready remote service. M3 adds fixed Linux `uname -s` over pinned-host-key SSH and a fixed HTTPS `/health` GET. There is **no** generic remote command, arbitrary URL, mutation, external plugin, complete remote OIDC federation, automatic token renewal or tamper-evident audit. JWT HTTP and short-lived Vault-compatible SSH certificate issuance are opt-in pre-alpha slices. Use a dedicated minimally privileged OS/SSH identity and trusted configuration.
 
 ## Declarative M1 configuration + M2 execution runtime
 
