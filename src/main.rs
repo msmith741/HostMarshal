@@ -20,6 +20,13 @@ use hostmarshal::{
 };
 use rmcp::{ServiceExt, transport::stdio};
 
+/// Trusted-launcher-only selection of the audit destination and delivery policy.
+struct AuditOptions<'a> {
+    log: Option<&'a str>,
+    evidence: Option<&'a str>,
+    delivery: Option<&'a str>,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -156,9 +163,11 @@ async fn main() -> Result<()> {
                 address,
                 directory,
                 auth_file,
-                audit_file,
-                audit_evidence,
-                audit_delivery,
+                AuditOptions {
+                    log: audit_file,
+                    evidence: audit_evidence,
+                    delivery: audit_delivery,
+                },
                 ssh_map,
                 vault_ssh,
             )
@@ -194,9 +203,11 @@ async fn main() -> Result<()> {
             serve_declarative(
                 directory,
                 principal,
-                audit_path,
-                audit_evidence,
-                audit_delivery,
+                AuditOptions {
+                    log: audit_path,
+                    evidence: audit_evidence,
+                    delivery: audit_delivery,
+                },
                 ssh_map,
                 vault_ssh,
             )
@@ -225,9 +236,7 @@ async fn main() -> Result<()> {
 async fn serve_declarative(
     directory: &str,
     principal: &str,
-    audit_path: Option<&str>,
-    evidence_path: Option<&str>,
-    audit_delivery: Option<&str>,
+    audit_options: AuditOptions<'_>,
     ssh_map: Option<&str>,
     vault_ssh: Option<&str>,
 ) -> Result<()> {
@@ -235,7 +244,7 @@ async fn serve_declarative(
     // No MCP message can choose or modify either value.
     let caller = AuthenticatedCaller::from_trusted_launcher(principal)?;
     let config = CompiledConfig::load(Path::new(directory))?;
-    let audit = open_audit(audit_path, evidence_path, audit_delivery)?;
+    let audit = open_audit(audit_options.log, audit_options.evidence, audit_options.delivery)?;
     let broker = choose_broker(&config, ssh_map, vault_ssh, Arc::clone(&audit))?;
     let store = Arc::new(ConfigStore::new(config));
     let runtime = Arc::new(ExecutionCoordinator::new(Arc::clone(&store), broker, audit));
@@ -289,9 +298,7 @@ async fn serve_remote_http(
     listen: &str,
     directory: &str,
     auth_file: &str,
-    audit_path: Option<&str>,
-    evidence_path: Option<&str>,
-    audit_delivery: Option<&str>,
+    audit_options: AuditOptions<'_>,
     ssh_map: Option<&str>,
     vault_ssh: Option<&str>,
 ) -> Result<()> {
@@ -307,7 +314,7 @@ async fn serve_remote_http(
     let verifier = Arc::new(RemoteJwtVerifier::load(Path::new(auth_file))?);
     verifier.validate_authorization_server().await?;
     let config = CompiledConfig::load(Path::new(directory))?;
-    let audit = open_audit(audit_path, evidence_path, audit_delivery)?;
+    let audit = open_audit(audit_options.log, audit_options.evidence, audit_options.delivery)?;
     let broker = choose_broker(&config, ssh_map, vault_ssh, Arc::clone(&audit))?;
     let store = Arc::new(ConfigStore::new(config));
     let runtime = Arc::new(ExecutionCoordinator::new(Arc::clone(&store), broker, audit));
