@@ -242,7 +242,7 @@ def main():
                 "token_no_default_policy": True,
                 "token_policies": ["hostmarshal-sign-only"],
                 "token_type": "service",
-                "token_ttl": "90s",
+                "token_ttl": "30s",
                 "token_max_ttl": "6m",
             }, root_token)
             role_id = api("GET", "auth/approle/role/hostmarshal/role-id",
@@ -264,6 +264,38 @@ def main():
             )
             api("PUT", "sys/policies/acl/hostmarshal-sign-only",
                 {"policy": renewable_policy}, root_token)
+            # An epoch marker is operator-owned state, never an access token.
+            # Tests simulate an atomic administrator update; production
+            # deployments must keep the file and its parent outside the
+            # HostMarshal runtime user's write authority.
+            # The external operator runs as a different OS principal.
+            # /run, its dedicated child, and marker are all root-owned,
+            # non-writable by HostMarshal's unprivileged test process.
+            # CI uses sudo solely to set up/advance/clean up the fixture.
+            operator_directory = Path("/run") / ("hm-ci-epoch-" + secrets.token_hex(8))
+            subprocess.run(
+                ["sudo", "install", "-d", "-o", "root", "-g", "root", "-m", "0755",
+                 str(operator_directory)],
+                check=True, capture_output=True, timeout=10,
+            )
+            recovery_file = operator_directory / "epoch"
+
+            def advance_recovery_epoch(value):
+                source = root / "staged-recovery-epoch"
+                source.write_text(f"{value}\n")
+                subprocess.run(
+                    ["sudo", "install", "-o", "root", "-g", "root", "-m", "0444",
+                     str(source), str(operator_directory / "next")],
+                    check=True, capture_output=True, timeout=10,
+                )
+                subprocess.run(
+                    ["sudo", "mv", "-f", "--", str(operator_directory / "next"),
+                     str(recovery_file)],
+                    check=True, capture_output=True, timeout=10,
+                )
+
+            advance_recovery_epoch(100)
+
             app_cfg = json.loads(signer_config.read_text())
             app_cfg.pop("tokenFile")
             app_cfg["appRole"] = {
@@ -271,9 +303,10 @@ def main():
                 "roleIdFile": str(role_file),
                 "secretIdFile": str(secret_file),
                 "expectedPolicy": "hostmarshal-sign-only",
-                # Exceeds 90-second TTL intentionally: every subsequent call
-                # must exercise renew-self, rather than silently using a cache.
+                # Exceeds the 30-second lease deliberately: renewals must
+                # still honor one-third-TTL minimum spacing.
                 "renewBeforeSeconds": 120,
+                "recoveryEpochFile": str(recovery_file),
             }
             app_config = root / "vault-approle.json"
             app_config.write_text(json.dumps(app_cfg))
@@ -311,16 +344,76 @@ def main():
                     assert result["structuredContent"] == {"id": TARGET, "os": "Linux"}
                 assert not list(ephemeral.iterdir())
             observe_app(True)   # AppRole login obtains first restricted token
+            time.sleep(11)
             observe_app(True)   # renew-self must work for a reusable session
             api("PUT", "sys/policies/acl/hostmarshal-sign-only",
                 {"policy": policy}, root_token)
-            observe_app(False)  # failed renew-self quarantines token
+            time.sleep(11)
+            observe_app(False)  # failed background renew-self quarantines token
             api("PUT", "sys/policies/acl/hostmarshal-sign-only",
                 {"policy": renewable_policy}, root_token)
             observe_app(False)  # must NOT silently re-login with SecretID
+            advance_recovery_epoch(99)
+            observe_app(False)  # rollbacks are never authorization
+            advance_recovery_epoch(100)
+            observe_app(False)  # restoring the baseline still does not recover
+            advance_recovery_epoch(101)   # explicit operator-authorized retry
+            observe_app(True)             # fresh bounded Vault AppRole login
             app_text = app_audit.read_text()
             for value in (role_id, secret_id, root_token, restricted, replacement):
                 assert value not in app_text, "Vault credential leaked to audit"
+            process.stdin.close()
+            process.wait(timeout=6)
+            process = None
+
+            # Independent proactive lifecycle: no invocation occurs during
+            # a lease longer than its 30s TTL. A call at 36s can succeed ONLY
+            # if the provider-side background renewal kept the Vault lease
+            # alive; request-time renewal alone would be too late.
+            api("POST", "auth/approle/role/hostmarshal", {
+                "bind_secret_id": True,
+                "secret_id_num_uses": 0,
+                "token_no_default_policy": True,
+                "token_policies": ["hostmarshal-sign-only"],
+                "token_type": "service",
+                "token_ttl": "30s",
+                "token_max_ttl": "6m",
+            }, root_token)
+            proactive = dict(app_cfg)
+            proactive["appRole"] = dict(app_cfg["appRole"])
+            proactive["appRole"]["renewBeforeSeconds"] = 15
+            proactive_config = root / "vault-proactive.json"
+            proactive_config.write_text(json.dumps(proactive))
+            proactive_config.chmod(0o600)
+            process = subprocess.Popen([
+                str(BIN), "--config-dir", str(config),
+                "--principal", "example-operator",
+                "--vault-ssh-config", str(proactive_config),
+                "--audit-log", str(app_audit),
+            ], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, bufsize=1, env=environment)
+            proactive_client = MCP(process)
+
+            def observe_proactive(success):
+                result = proactive_client.tool("linux.uname", TARGET)
+                assert (result.get("isError") is not True) == success, result
+                assert not list(ephemeral.iterdir())
+
+            observe_proactive(True)
+            time.sleep(36)
+            observe_proactive(True)  # lease survived idle period beyond TTL
+            # Removing renew privilege causes the next background renewal
+            # to quarantine the session. A repaired policy alone is NOT a
+            # recovery authorization.
+            api("PUT", "sys/policies/acl/hostmarshal-sign-only",
+                {"policy": policy}, root_token)
+            time.sleep(19)
+            observe_proactive(False)
+            api("PUT", "sys/policies/acl/hostmarshal-sign-only",
+                {"policy": renewable_policy}, root_token)
+            observe_proactive(False)
+            advance_recovery_epoch(102)
+            observe_proactive(True)
             process.stdin.close()
             process.wait(timeout=6)
             process = None
@@ -358,7 +451,7 @@ def main():
                 "token_no_default_policy": True,
                 "token_policies": ["hostmarshal-sign-only"],
                 "token_type": "service",
-                "token_ttl": "90s",
+                "token_ttl": "30s",
                 "token_max_ttl": "6m",
             }, root_token)
 
@@ -390,6 +483,7 @@ def main():
                 "jwtFile": str(workload_file),
                 "expectedPolicy": "hostmarshal-sign-only",
                 "renewBeforeSeconds": 120,
+                "recoveryEpochFile": str(recovery_file),
             }
             config_jwt = root / "vault-jwt.json"
             config_jwt.write_text(json.dumps(jwt_config))
@@ -426,13 +520,17 @@ def main():
                 assert not list(ephemeral.iterdir())
 
             observe_jwt(True)   # genuine Vault JWT authentication
-            observe_jwt(True)   # forced, policy-constrained renew-self
+            time.sleep(11)
+            observe_jwt(True)   # bounded, policy-constrained renew-self
             api("PUT", "sys/policies/acl/hostmarshal-sign-only",
                 {"policy": policy}, root_token)
+            time.sleep(11)
             observe_jwt(False)  # renewal revoked => sticky quarantine
             api("PUT", "sys/policies/acl/hostmarshal-sign-only",
                 {"policy": renewable_policy}, root_token)
             observe_jwt(False)  # cannot silently re-login with JWT
+            advance_recovery_epoch(103)
+            observe_jwt(True)        # fresh JWT signature/role policy validated
             process.stdin.close()
             process.wait(timeout=6)
             process = None
@@ -501,7 +599,8 @@ def main():
             for secret in (root_token, restricted, replacement, "BEGIN OPENSSH PRIVATE KEY"):
                 assert secret not in audit_text
             assert "succeeded" in audit_text and "failed" in audit_text
-            print("Real Vault 2.2.1 TLS, restricted SSH role/token, sshd, revocation, outage and cleanup passed")
+            print("Real Vault 2.2.1 TLS, restricted SSH signing, proactive renewal, "
+                  "AppRole/JWT operator-gated recovery, sticky revocation, outage and cleanup passed")
         finally:
             if process is not None:
                 process.stdin.close()
@@ -521,6 +620,11 @@ def main():
                 ["docker", "rm", "--force", container],
                 capture_output=True, text=True, timeout=15,
             )
+            if "operator_directory" in locals():
+                subprocess.run(
+                    ["sudo", "rm", "-rf", "--", str(operator_directory)],
+                    capture_output=True, text=True, timeout=15,
+                )
 
 
 if __name__ == "__main__":

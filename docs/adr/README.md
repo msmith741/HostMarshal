@@ -19,6 +19,7 @@
 | [0013](0013-pinned-oidc-and-isolated-ingress.md) | Pinned OIDC and isolated HTTPS ingress | Proposed |
 | [0014](0014-disposable-k3s-isolation-acceptance.md) | Disposable K3s network isolation acceptance | Proposed |
 | [0015](0015-issuer-neutral-jwt-workload-auth.md) | Externally issued workload JWT for scoped Vault authentication | Proposed |
+| [0016](0016-vault-proactive-renewal-recovery.md) | Proactive Vault lease renewal and operator-gated quarantine recovery | Proposed |
 
 ## How to use ADRs
 
