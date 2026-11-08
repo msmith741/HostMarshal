@@ -351,6 +351,10 @@ def main():
             api("PUT", "sys/policies/acl/hostmarshal-sign-only",
                 {"policy": renewable_policy}, root_token)
             observe_app(False)  # must NOT silently re-login with SecretID
+            advance_recovery_epoch(99)
+            observe_app(False)  # rollbacks are never authorization
+            advance_recovery_epoch(100)
+            observe_app(False)  # restoring the baseline still does not recover
             advance_recovery_epoch(101)   # explicit operator-authorized retry
             observe_app(True)             # fresh bounded Vault AppRole login
             app_text = app_audit.read_text()
