@@ -3,6 +3,7 @@
 pub mod adapter;
 pub mod audit;
 pub mod audit_delivery;
+pub mod audit_evidence;
 pub mod authorization;
 pub mod credentials;
 pub mod declarative;

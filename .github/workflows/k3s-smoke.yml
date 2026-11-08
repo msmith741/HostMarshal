@@ -5,6 +5,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '47 5 * * 0' # weekly full K3s smoke; otherwise only relevant changes
 
 permissions:
   contents: read
@@ -14,7 +16,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  select:
+    name: K3s change impact selection
+    runs-on: ubuntu-latest
+    outputs:
+      k3s: ${{ steps.paths.outputs.k3s }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Conservative path classification
+        id: paths
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.sha }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          python3 tests/test_ci_select.py
+          python3 tests/ci_select.py --event "$EVENT" --base "$BASE" --head "$HEAD" --output "$GITHUB_OUTPUT"
+
   smoke:
+    needs: select
+    if: needs.select.outputs.k3s == 'true'
     name: Single-node K3s startup, TLS ingress and authorized MCP
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -78,3 +102,23 @@ jobs:
       - name: Always delete disposable cluster
         if: always()
         run: k3d cluster delete hostmarshal-smoke || true
+
+  k3s-gate:
+    name: K3s regression acceptance gate
+    if: always()
+    needs: [select, smoke]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require successful relevant K3s smoke
+        env:
+          SELECT_RESULT: ${{ needs.select.result }}
+          K3S_NEEDED: ${{ needs.select.outputs.k3s }}
+          SMOKE_RESULT: ${{ needs.smoke.result }}
+        run: |
+          set -euo pipefail
+          test "$SELECT_RESULT" = success
+          if [ "$K3S_NEEDED" = true ]; then
+            test "$SMOKE_RESULT" = success
+          else
+            test "$SMOKE_RESULT" = skipped
+          fi

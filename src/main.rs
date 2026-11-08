@@ -6,6 +6,7 @@ use anyhow::{Result, bail};
 use hostmarshal::{
     audit::{AuditSink, JsonlFileAudit, StderrAudit},
     audit_delivery::{AuditDeliverySpec, BoundedAuditSink},
+    audit_evidence::{self, EvidenceFileAudit},
     authorization::{AuthorizationRequest, Authorizer, GrantAuthorizer},
     credentials::{CredentialBroker, DenyCredentialBroker, LocalSshKeyBroker},
     declarative::CompiledConfig,
@@ -18,6 +19,13 @@ use hostmarshal::{
     vault_ssh::VaultSshCertificateBroker,
 };
 use rmcp::{ServiceExt, transport::stdio};
+
+/// Trusted-launcher-only selection of the audit destination and delivery policy.
+struct AuditOptions<'a> {
+    log: Option<&'a str>,
+    evidence: Option<&'a str>,
+    delivery: Option<&'a str>,
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -46,6 +54,16 @@ async fn main() -> Result<()> {
                     "grants": config.grants.len(),
                 }))?
             );
+            Ok(())
+        }
+        [audit, verify, path, opts @ ..] if audit == "audit" && verify == "verify" => {
+            let expected = match opts {
+                [] => None,
+                [flag, head] if flag == "--expected-head" => Some(head.as_str()),
+                _ => bail!("usage: hostmarshal audit verify <path> [--expected-head <hex>]"),
+            };
+            let head = audit_evidence::verify(Path::new(path), expected)?;
+            println!("{}", serde_json::to_string_pretty(&head)?);
             Ok(())
         }
         [command, schema] if command == "config" && schema == "schema" => {
@@ -118,6 +136,7 @@ async fn main() -> Result<()> {
             && auth_flag == "--auth-config" =>
         {
             let mut audit_file = None;
+            let mut audit_evidence = None;
             let mut audit_delivery = None;
             let mut ssh_map = None;
             let mut vault_ssh = None;
@@ -128,6 +147,9 @@ async fn main() -> Result<()> {
                 };
                 match flag.as_str() {
                     "--audit-log" if audit_file.is_none() => audit_file = Some(value.as_str()),
+                    "--audit-evidence-log" if audit_evidence.is_none() => {
+                        audit_evidence = Some(value.as_str());
+                    }
                     "--audit-delivery-config" if audit_delivery.is_none() => {
                         audit_delivery = Some(value.as_str());
                     }
@@ -141,8 +163,11 @@ async fn main() -> Result<()> {
                 address,
                 directory,
                 auth_file,
-                audit_file,
-                audit_delivery,
+                AuditOptions {
+                    log: audit_file,
+                    evidence: audit_evidence,
+                    delivery: audit_delivery,
+                },
                 ssh_map,
                 vault_ssh,
             )
@@ -152,6 +177,7 @@ async fn main() -> Result<()> {
             if flag == "--config-dir" && principal_flag == "--principal" =>
         {
             let mut audit_path = None;
+            let mut audit_evidence = None;
             let mut audit_delivery = None;
             let mut ssh_map = None;
             let mut vault_ssh = None;
@@ -162,6 +188,9 @@ async fn main() -> Result<()> {
                 };
                 match option.as_str() {
                     "--audit-log" if audit_path.is_none() => audit_path = Some(value.as_str()),
+                    "--audit-evidence-log" if audit_evidence.is_none() => {
+                        audit_evidence = Some(value.as_str());
+                    }
                     "--audit-delivery-config" if audit_delivery.is_none() => {
                         audit_delivery = Some(value.as_str());
                     }
@@ -174,8 +203,11 @@ async fn main() -> Result<()> {
             serve_declarative(
                 directory,
                 principal,
-                audit_path,
-                audit_delivery,
+                AuditOptions {
+                    log: audit_path,
+                    evidence: audit_evidence,
+                    delivery: audit_delivery,
+                },
                 ssh_map,
                 vault_ssh,
             )
@@ -185,14 +217,15 @@ async fn main() -> Result<()> {
             "usage: hostmarshal config validate <directory> | \
              hostmarshal config inspect <directory> | \
              hostmarshal config schema | \
+             hostmarshal audit verify <path> [--expected-head <hex>] | \
              hostmarshal policy explain <directory> --subject <launcher-subject> \
                  --capability <name> --target <host-id> | \
              hostmarshal http --listen <127.0.0.1:port> --config-dir <directory> \
-                 --auth-config <protected-json-file> [--audit-log <file>] \
+                 --auth-config <protected-json-file> [--audit-log <file> | --audit-evidence-log <file>] \
                  [--audit-delivery-config <protected-json-file>] \
                  [--ssh-credential-map <file> | --vault-ssh-config <file>] | \
              hostmarshal --config-dir <directory> --principal <trusted-launcher-subject> \
-             [--audit-log <protected-file-path>] \
+             [--audit-log <protected-file-path> | --audit-evidence-log <file>] \
              [--audit-delivery-config <protected-json-file>] \
              [--ssh-credential-map <protected-json-file> | --vault-ssh-config <file>] | \
              Use YAML resources; legacy --config JSON mode has been retired"
@@ -203,8 +236,7 @@ async fn main() -> Result<()> {
 async fn serve_declarative(
     directory: &str,
     principal: &str,
-    audit_path: Option<&str>,
-    audit_delivery: Option<&str>,
+    audit_options: AuditOptions<'_>,
     ssh_map: Option<&str>,
     vault_ssh: Option<&str>,
 ) -> Result<()> {
@@ -212,7 +244,11 @@ async fn serve_declarative(
     // No MCP message can choose or modify either value.
     let caller = AuthenticatedCaller::from_trusted_launcher(principal)?;
     let config = CompiledConfig::load(Path::new(directory))?;
-    let audit = open_audit(audit_path, audit_delivery)?;
+    let audit = open_audit(
+        audit_options.log,
+        audit_options.evidence,
+        audit_options.delivery,
+    )?;
     let broker = choose_broker(&config, ssh_map, vault_ssh, Arc::clone(&audit))?;
     let store = Arc::new(ConfigStore::new(config));
     let runtime = Arc::new(ExecutionCoordinator::new(Arc::clone(&store), broker, audit));
@@ -266,8 +302,7 @@ async fn serve_remote_http(
     listen: &str,
     directory: &str,
     auth_file: &str,
-    audit_path: Option<&str>,
-    audit_delivery: Option<&str>,
+    audit_options: AuditOptions<'_>,
     ssh_map: Option<&str>,
     vault_ssh: Option<&str>,
 ) -> Result<()> {
@@ -283,7 +318,11 @@ async fn serve_remote_http(
     let verifier = Arc::new(RemoteJwtVerifier::load(Path::new(auth_file))?);
     verifier.validate_authorization_server().await?;
     let config = CompiledConfig::load(Path::new(directory))?;
-    let audit = open_audit(audit_path, audit_delivery)?;
+    let audit = open_audit(
+        audit_options.log,
+        audit_options.evidence,
+        audit_options.delivery,
+    )?;
     let broker = choose_broker(&config, ssh_map, vault_ssh, Arc::clone(&audit))?;
     let store = Arc::new(ConfigStore::new(config));
     let runtime = Arc::new(ExecutionCoordinator::new(Arc::clone(&store), broker, audit));
@@ -296,11 +335,18 @@ async fn serve_remote_http(
 /// Neither MCP requests nor YAML grants can supply delivery destinations.
 fn open_audit(
     audit_path: Option<&str>,
+    evidence_path: Option<&str>,
     delivery_config: Option<&str>,
 ) -> Result<Arc<dyn AuditSink>> {
-    let sink: Arc<dyn AuditSink> = match audit_path {
-        Some(path) => Arc::new(JsonlFileAudit::open(Path::new(path))?),
-        None => Arc::new(StderrAudit),
+    anyhow::ensure!(
+        audit_path.is_none() || evidence_path.is_none(),
+        "audit destinations are mutually exclusive"
+    );
+    let sink: Arc<dyn AuditSink> = match (audit_path, evidence_path) {
+        (Some(path), None) => Arc::new(JsonlFileAudit::open(Path::new(path))?),
+        (None, Some(path)) => Arc::new(EvidenceFileAudit::open(Path::new(path))?),
+        (None, None) => Arc::new(StderrAudit),
+        (Some(_), Some(_)) => unreachable!("exclusive audit destinations enforced"),
     };
     match delivery_config {
         Some(path) => {
