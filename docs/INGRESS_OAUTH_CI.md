@@ -41,7 +41,7 @@ The `ingress-oauth` job of `.github/workflows/ci.yml` compiles `hostmarshal` wit
 .oauth-ci-venv/bin/python tests/ingress_oidc_ci.py
 ```
 
-The script creates independent CAs, a Keycloak client secret and ingress proof at runtime; creates/disposes an isolated Docker network and containers; obtains a real OAuth access token; checks discovery, HostMarshal tool discovery, TLS trust, malicious forwarding, and inability to access the loopback-only backend from the runner or a Docker bridge attacker. This job is **additional to**, never a replacement for, Rust format/Clippy/tests, real-Vault SSH, schema conformance, legacy MCP and parser fuzz CI.
+The script creates independent CAs, a Keycloak client secret and ingress proof at runtime; creates/disposes an isolated Docker network and containers; obtains a real OAuth access token; checks discovery, authorized versus ungranted service-account tool discovery, mismatched issuer/JWKS startup rejection, TLS trust, malicious forwarding, and inability to access the loopback-only backend from the runner or a Docker bridge attacker. This job is **additional to**, never a replacement for, Rust format/Clippy/tests, real-Vault SSH, schema conformance, legacy MCP and parser fuzz CI.
 
 ## Translating the pattern to a production deployment
 

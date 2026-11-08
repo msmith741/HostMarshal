@@ -178,7 +178,7 @@ def network_inspection(proxy_name, backend_name, kc_name, network):
         assert sock.connect_ex(("127.0.0.1", 8338)) != 0, "HostMarshal port exposed on runner"
 
 
-def write_realm(path, client_secret):
+def write_realm(path, client_secret, denied_secret):
     # The only real credential is generated per CI job; never committed.
     realm = {
         "realm": REALM, "enabled": True, "sslRequired": "none",
@@ -218,6 +218,12 @@ def write_realm(path, client_secret):
             }],
         }],
     }
+    # Second real service account has valid JWT issuer/audience/scope but no
+    # HostMarshal Grant. Cryptographic identity does not grant a capability.
+    denied = json.loads(json.dumps(realm["clients"][0]))
+    denied["clientId"] = "hostmarshal-ungranted"
+    denied["secret"] = denied_secret
+    realm["clients"].append(denied)
     path.write_text(json.dumps(realm))
     # This fixture is read-only mounted into non-root Keycloak; all secrets
     # are disposable and never committed or logged.
@@ -232,6 +238,7 @@ def main():
     )
     published_mcp, published_auth = free_port(), free_port()
     secret = secrets.token_urlsafe(32)
+    denied_secret = secrets.token_urlsafe(32)
     proof = secrets.token_urlsafe(48)
     root = Path(tempfile.mkdtemp(prefix="hmci-ingress-"))
     created = []
@@ -243,7 +250,7 @@ def main():
             root / "ingress-tls", MCP_HOST,
         )
         realm = root / "realm.json"
-        write_realm(realm, secret)
+        write_realm(realm, secret, denied_secret)
         run("docker", "network", "create", network)
         created.append(("network", network))
         kc_args = [
@@ -383,7 +390,24 @@ def main():
         assert status == 401 and "resource_metadata=" in headers.get("www-authenticate", "")
         status, _, body = mcp_rpc(published_mcp, ingress_ca, access_token)
         assert status == 200 and b"inventory.inspect" in body, (status, body)
-        assert b"sample-linux" not in body  # scope gates discovery, not inventory contents
+        assert b"sample-linux" not in body
+        # Same real issuer and signed audience/scope, distinct service account:
+        # the verification succeeds but HostMarshal's Grant must deny tools.
+        denied_status, _, denied_reply = token_request(
+            published_auth, oauth_ca, denied_secret,
+            client_id="hostmarshal-ungranted",
+        )
+        assert denied_status == 200, (denied_status, denied_reply)
+        denied_token = json.loads(denied_reply)["access_token"]
+        assert jwt.decode(
+            denied_token, options={"verify_signature": False},
+        )["sub"] != claims["sub"]
+        denied_status, _, denied_tools = mcp_rpc(
+            published_mcp, ingress_ca, denied_token,
+        )
+        assert denied_status == 200 and json.loads(denied_tools)["result"]["tools"] == [], (
+            denied_status, denied_tools,
+        )  # scope gates discovery, not inventory contents
 
         status, _, body = mcp_rpc(
             published_mcp, ingress_ca, access_token,
@@ -394,6 +418,37 @@ def main():
             },
         )
         assert status == 200 and b"inventory.inspect" in body, (status, body)
+
+        # Discovery is pinned to administrator expectations. A wrong issuer
+        # or a changed JWKS URI must PREVENT the server from binding, not
+        # silently use keys from the discovery response.
+        for failure, changed, message in [
+            ("issuer", {"issuer": issuer + "-attacker"}, "issuer mismatch"),
+            ("jwks", {"jwksUrl": issuer + "/protocol/openid-connect/other-certs"},
+             "administrator-pinned URL"),
+        ]:
+            bad = json.loads(auth_config.read_text())
+            bad.update(changed)
+            bad_path = fixture / f"auth-bad-{failure}.json"
+            bad_path.write_text(json.dumps(bad))
+            bad_path.chmod(0o600)
+            denied = run(
+                "docker", "run", "--rm",
+                "--network", "container:" + proxy,
+                "--user", f"{os.getuid()}:{os.getgid()}",
+                "--read-only", "--cap-drop", "ALL",
+                "--security-opt", "no-new-privileges",
+                "-v", f"{BIN.resolve()}:/usr/local/bin/hostmarshal:ro",
+                "-v", f"{fixture}:/fixtures:ro",
+                OS_IMAGE, "/usr/local/bin/hostmarshal",
+                "http", "--listen", "127.0.0.1:8339",
+                "--config-dir", "/fixtures/config",
+                "--auth-config", "/fixtures/" + bad_path.name,
+                check=False, timeout=18,
+            )
+            assert denied.returncode != 0 and message in denied.stderr, (
+                failure, denied.returncode, denied.stderr[-500:],
+            )
 
         # A Keycloak access token with audience/scope requirements missing is
         # rejected regardless of the real issuer signature.
