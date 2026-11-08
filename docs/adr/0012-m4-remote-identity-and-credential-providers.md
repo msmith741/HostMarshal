@@ -54,3 +54,9 @@ M4 does not grant write/mutation privileges, unattended remediation, interactive
 ## Status and migration
 
 This ADR is **Proposed** until a complete implementation and its tests exist. Existing local stdio deployments remain supported; the presence of this ADR or provider-neutral interfaces does not imply that remote HTTP or Vault is active.
+
+### M4 Phase-B hardening decision (FR-023–FR-025)
+
+The operator may choose exactly one trusted key source: an owner-provisioned offline JWKS file, or a fixed HTTPS JWKS URL with an independently provisioned trusted TLS CA and bounded refresh interval. No JWT header/claim, proxy header or OAuth metadata may alter the issuer URI, key URL, trust roots or resource audience. On-request refresh is serialized, replaces the entire key set, rejects redirect/oversized or malformed key responses and fails closed if keys are stale. Protected-resource discovery (RFC 9728) advertises the configured resource/issuer without creating authority or changing tool grants; a 401 bearer challenge carries its fixed HTTPS metadata URI.
+
+A deployment behind a trusted HTTPS reverse proxy must keep the backend on loopback and opt into a protected shared ingress proof alongside exact forwarded scheme and public Host. The proxy must strip untrusted client-supplied attestations, terminate TLS and isolate the backend; HostMarshal rejects absent/wrong/duplicate proof. This is deliberately not a substitute for mTLS or a proof of production network isolation. **ADR-0012 remains Proposed** until operational bypass testing, key rotation/outage monitoring, complete discovery and audit gates are satisfied.

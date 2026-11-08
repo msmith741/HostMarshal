@@ -23,7 +23,7 @@
 
 The project now includes a loopback-only HTTP MCP listener with signed access-token validation using a pinned, local JWKS. Verification is per request; the SDK passes a trusted identity extension into the existing execution coordinator. Test coverage includes forged/expired/wrong-audience tokens, subject isolation and common HTTP header bypasses. The middleware also writes redacted, reason-coded denial events to the same configured sink, preserves verified/unverified identity boundaries and returns HTTP 503 if it cannot record a rejection. The HTTP parser and upstream proxy remain outside that audit boundary.
 
-**Still blocking phase-B completion:** online JWKS renewal/rotation, external TLS ingress proof and bypass isolation, authorization-server/protected-resource metadata, full lifecycle/request audit coverage beyond middleware-visible denials, and more extensive concurrency/availability tests. No internet-facing listener is enabled.
+**New experimental phase-B hardening (FR-023–FR-025):** optional fixed-URL HTTPS JWKS with pinned TLS CA and fail-closed refresh, RFC 9728 protected-resource metadata/challenge, and a proof-attested trusted-proxy mode, with disposable TLS key-rotation and bypass tests in CI. **Still blocking phase-B completion:** production reverse-proxy TLS/OS network isolation and independent bypass validation, full authorization-server/OIDC discovery and OAuth client registration, complete audit before/after middleware, refresh-on-outage stress/recovery, and stronger concurrency/rate-limit testing. HostMarshal itself never binds a publicly reachable interface.
 
 ## Phase C — Vault SSH certificate provider
 

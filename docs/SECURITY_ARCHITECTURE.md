@@ -91,9 +91,9 @@ A `CredentialBroker` interface accepts exact operation/target/purpose scopes. Wi
 
 ## M4 experimental remote MCP trust boundary
 
-The new loopback-only HTTP MCP mode authenticates every request with a locally pinned RS256 JWKS, exact issuer/resource audience, subject, lifetime and observe-only scope. Only a validated `AuthenticatedCaller` enters the authorization-aware tool discovery and execution pipeline; forwarded identity headers are ignored. The handler denies requests without a trusted request context and exposes no unauthenticated tool catalog. Host/Origin checking and bounded request bodies constrain common browser/proxy abuse.
+The loopback-only HTTP MCP mode authenticates every request with an offline pinned or fixed-HTTPS/pinned-CA RS256 JWKS, exact issuer/resource audience, subject, lifetime and observe-only scope. Only a validated `AuthenticatedCaller` enters the authorization-aware tool discovery and execution pipeline; forwarded identity headers are ignored. The handler denies requests without a trusted request context and exposes no unauthenticated tool catalog. Host/Origin checking and bounded request bodies constrain common browser/proxy abuse.
 
-**This is not an independently authenticated public listener.** A separately managed TLS reverse proxy must secure the external endpoint and prevent direct backend access. No online JWKS renewal, OAuth protected resource metadata, token revocation, external audit of pre-MCP auth errors or a **production-validated Vault SSH certificate issuer** has been shipped. The pinned JWKS and OS file permissions are deployment trust assumptions. Do not mark M4 complete or claim production-grade remote security on this basis alone. See [Remote MCP](REMOTE_MCP.md).
+**This is not an independently authenticated public listener.** A separately managed TLS reverse proxy must secure the external endpoint and prevent direct backend access. Optional pinned-HTTPS JWKS renewal, OAuth protected-resource metadata and fixed proof-attested ingress checks now exist, but token revocation/complete OIDC discovery, production proxy isolation, external audit of pre-MCP auth errors and a **production-validated Vault SSH certificate issuer** remain unavailable. The pinned JWKS and OS file permissions are deployment trust assumptions. Do not mark M4 complete or claim production-grade remote security on this basis alone. See [Remote MCP](REMOTE_MCP.md).
 
 ## M4 Vault certificate and temporary-key trust boundary
 
@@ -108,3 +108,7 @@ Signatures prove origin, not safety. A compromised broker/OS or overly powerful 
 ## Release security gates
 
 No live target adapter until identity, authorization, target validation, time/output bounds, and auditable outcomes are demonstrated. No third-party plugin execution without independent isolation verification. No privileged mutation or production claims without audited policy, approvals, failure testing, and documented response procedures.
+
+## FR-023–FR-025: remote issuer trust and reverse-proxy attestations
+
+The optional online verifier has a distinct administrator-fixed URL and CA, refreshes under a single async mutex on request after its bounded interval, discards previous keys on successful rotation and **does not use stale keys after refresh failure**. RFC 9728 resource metadata is public through the trusted ingress but does not create a caller. In `trustedProxy` mode, all backend calls require a protected shared ingress proof and validated forwarded HTTPS/public Host. The loopback listener cannot be reached from another host, but malicious colocated processes, a compromised proxy/proof, improper external network namespace or forged client headers passed through the ingress remain deployment risks. The CI TLS proxy fixture validates the logical protocol boundary only; it does not establish production TLS or OS isolation. See [REMOTE_MCP.md](REMOTE_MCP.md).

@@ -49,7 +49,7 @@ Structured audit events go to stderr by default; for a local synchronized JSONL 
 
 ## M4 experimental authenticated HTTP MCP
 
-A new, separate loopback-only `http` CLI mode authenticates each request with an administrator-pinned RS256 JWKS and exact issuer/audience, validates JWT lifetime/scope and binds the verified subject to the existing authorization coordinator. Middleware-visible HTTP authentication and protocol denials are now audited without trusting unverified identity claims; rejection-audit failure produces HTTP 503. The public-facing HTTPS/TLS reverse proxy must be separately configured and protected. This is **not** a full OIDC discovery, key-rotation or Vault credential integration; M4 remains unfinished.
+A new, separate loopback-only `http` CLI mode authenticates each request with an administrator-pinned RS256 JWKS and exact issuer/audience, validates JWT lifetime/scope and binds the verified subject to the existing authorization coordinator. Middleware-visible HTTP authentication and protocol denials are now audited without trusting unverified identity claims; rejection-audit failure produces HTTP 503. The public-facing HTTPS/TLS reverse proxy must be separately configured and protected. An opt-in pinned-HTTPS online JWKS refresh and RFC 9728 protected-resource metadata mode now exists, with a shared-secret-attested trusted TLS proxy test fixture. This is **not** full OAuth login/OIDC federation or production TLS ingress; M4 remains unfinished.
 
 See [Remote MCP deployment and threat model](docs/REMOTE_MCP.md) and [M4 acceptance gates](docs/M4_IMPLEMENTATION_PLAN.md).
 
@@ -91,6 +91,7 @@ python3 tests/transport_smoke.py  # disposable sshd and TLS target (requires CI 
 python3 tests/vault_ssh_smoke.py  # disposable Vault-compatible TLS signer, SSH CA and sshd
 # Pinned Python JWT dependencies: see .github/workflows/ci.yml
 python3 tests/remote_http_smoke.py  # disposable RSA/JWKS and HTTP client
+python3 tests/remote_hardening_smoke.py  # disposable pinned-TLS JWKS, OAuth metadata and proxy bypass
 # Additional schema drift and independent validation run in CI
 ~~~
 

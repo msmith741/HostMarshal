@@ -40,6 +40,9 @@ HostMarshal provides **typed, authorized, auditable infrastructure operations** 
 | FR-020 | Issue verified short-lived SSH user certificates through a scoped Vault SSH signing provider, with ephemeral key lifecycle, strict principal/key/CA/TTL checks and no fallback | M4 |
 | FR-021 | Audit HTTP authentication and transport/protocol rejections with sanitized reason codes and no unverified identity attribution; fail closed on rejection-audit failure | M4 |
 | FR-022 | Authenticate a Vault SSH signing workload with protected AppRole credentials, exact token policy and bounded on-demand self-renewal; quarantine on renewal/token rejection without static-token fallback | M4 |
+| FR-023 | Rotate remote JWT verification keys from an administrator-pinned HTTPS JWKS endpoint with pinned CA, strict key validation, bounded refresh, and no stale-on-error fallback | M4 |
+| FR-024 | Publish RFC 9728 OAuth protected-resource metadata and a resource_metadata-bearing 401 challenge without treating discovery as authentication | M4 |
+| FR-025 | Require authenticated local reverse-proxy attestation for ingress mode (HTTPS scheme, exact public Host, protected proof) and deny direct-backend bypass, with sanitized audit | M4 |
 
 ## Non-functional requirements
 
