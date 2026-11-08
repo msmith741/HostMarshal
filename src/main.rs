@@ -11,6 +11,8 @@ use hostmarshal::{
     dynamic_mcp::DeclarativeMcp,
     identity::AuthenticatedCaller,
     runtime::ExecutionCoordinator,
+    remote_auth::RemoteJwtVerifier,
+    remote_http,
     snapshot::ConfigStore,
 };
 use rmcp::{ServiceExt, transport::stdio};
@@ -99,6 +101,28 @@ async fn main() -> Result<()> {
             );
             Ok(())
         }
+        [http, listen_flag, address, config_flag, directory, auth_flag, auth_file, options @ ..]
+            if http == "http"
+                && listen_flag == "--listen"
+                && config_flag == "--config-dir"
+                && auth_flag == "--auth-config" =>
+        {
+            let mut audit_file = None;
+            let mut ssh_map = None;
+            let mut remaining = options;
+            while !remaining.is_empty() {
+                let [flag, value, rest @ ..] = remaining else {
+                    bail!("missing HTTP server option value");
+                };
+                match flag.as_str() {
+                    "--audit-log" if audit_file.is_none() => audit_file = Some(value.as_str()),
+                    "--ssh-credential-map" if ssh_map.is_none() => ssh_map = Some(value.as_str()),
+                    _ => bail!("unknown or repeated HTTP server option"),
+                };
+                remaining = rest;
+            }
+            serve_remote_http(address, directory, auth_file, audit_file, ssh_map).await
+        }
         [flag, directory, principal_flag, principal, rest @ ..]
             if flag == "--config-dir" && principal_flag == "--principal" =>
         {
@@ -124,6 +148,9 @@ async fn main() -> Result<()> {
              hostmarshal config schema | \
              hostmarshal policy explain <directory> --subject <launcher-subject> \
                  --capability <name> --target <host-id> | \
+             hostmarshal http --listen <127.0.0.1:port> --config-dir <directory> \
+                 --auth-config <protected-json-file> [--audit-log <file>] \
+                 [--ssh-credential-map <file>] | \
              hostmarshal --config-dir <directory> --principal <trusted-launcher-subject> \
              [--audit-log <protected-file-path>] \
              [--ssh-credential-map <protected-json-file>] | \
@@ -196,4 +223,34 @@ fn register_reload_signals(store: Arc<ConfigStore>, directory: PathBuf) -> Resul
         }
     });
     Ok(())
+}
+
+async fn serve_remote_http(
+    listen: &str,
+    directory: &str,
+    auth_file: &str,
+    audit_path: Option<&str>,
+    ssh_map: Option<&str>,
+) -> Result<()> {
+    use std::net::SocketAddr;
+
+    let address: SocketAddr = listen.parse()?;
+    // Bind loopback only. External clients must come through a separately
+    // secured TLS reverse proxy; no X-Forwarded-User authentication shortcut.
+    anyhow::ensure!(address.ip().is_loopback(), "HTTP MCP must listen on loopback");
+    let verifier = Arc::new(RemoteJwtVerifier::load(Path::new(auth_file))?);
+    let config = CompiledConfig::load(Path::new(directory))?;
+    let store = Arc::new(ConfigStore::new(config));
+    let audit: Arc<dyn AuditSink> = match audit_path {
+        Some(path) => Arc::new(JsonlFileAudit::open(Path::new(path))?),
+        None => Arc::new(StderrAudit),
+    };
+    let broker: Arc<dyn CredentialBroker> = match ssh_map {
+        Some(path) => Arc::new(LocalSshKeyBroker::load(Path::new(path))?),
+        None => Arc::new(DenyCredentialBroker),
+    };
+    let runtime = Arc::new(ExecutionCoordinator::new(Arc::clone(&store), broker, audit));
+    #[cfg(unix)]
+    register_reload_signals(store, PathBuf::from(directory))?;
+    remote_http::serve_loopback(address, runtime, verifier).await
 }

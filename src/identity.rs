@@ -6,12 +6,13 @@ use anyhow::{Result, ensure};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AuthenticationMethod {
     TrustedLocalLauncher,
+    VerifiedJwtAccessToken,
 }
 
 /// Private fields prevent MCP tool arguments from constructing or modifying identity.
 #[derive(Clone, Debug)]
 pub struct AuthenticatedCaller {
-    issuer: &'static str,
+    issuer: String,
     subject: String,
     method: AuthenticationMethod,
 }
@@ -28,9 +29,20 @@ impl AuthenticatedCaller {
             "invalid launcher identity"
         );
         Ok(Self {
-            issuer: "local://trusted-launcher",
+            issuer: "local://trusted-launcher".to_owned(),
             subject: subject.to_owned(),
             method: AuthenticationMethod::TrustedLocalLauncher,
+        })
+    }
+
+    /// This constructor may be called only after cryptographic token verification
+    /// in the trusted remote authentication module, never from an MCP field.
+    pub(crate) fn from_verified_jwt(issuer: &str, subject: &str) -> Result<Self> {
+        ensure!(issuer.starts_with("https://") && !subject.is_empty(), "invalid verified identity");
+        Ok(Self {
+            issuer: issuer.to_owned(),
+            subject: subject.to_owned(),
+            method: AuthenticationMethod::VerifiedJwtAccessToken,
         })
     }
 
