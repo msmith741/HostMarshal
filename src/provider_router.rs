@@ -20,11 +20,14 @@ impl ProviderRoute {
             "credential provider route fields cannot be empty"
         );
         for field in [operation, target, purpose] {
+            let allowed_slash = field == operation;
             ensure!(
                 field.len() <= 128
-                    && field.bytes().all(
-                        |b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'/')
-                    ),
+                    && field.bytes().all(|b| {
+                        b.is_ascii_alphanumeric()
+                            || matches!(b, b'-' | b'_' | b'.')
+                            || (allowed_slash && b == b'/')
+                    }),
                 "invalid credential provider route"
             );
         }
