@@ -10,9 +10,9 @@ use std::{
 use anyhow::{Context, Result, ensure};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header};
 use reqwest::{Client, Url, header::HeaderMap};
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
-use serde::Deserialize;
 
 use crate::{
     credentials::check_private_key_file, identity::AuthenticatedCaller,
@@ -137,8 +137,11 @@ impl RemoteJwtVerifier {
         );
         let (keys, online) = match (config.jwks_file, config.jwks_url) {
             (Some(path), None) => {
-                ensure!(config.jwks_ca_certificate_file.is_none() && config.jwks_refresh_seconds.is_none(),
-                    "offline JWKS cannot specify online trust fields");
+                ensure!(
+                    config.jwks_ca_certificate_file.is_none()
+                        && config.jwks_refresh_seconds.is_none(),
+                    "offline JWKS cannot specify online trust fields"
+                );
                 let file = Path::new(&path);
                 ensure!(file.is_absolute(), "jwksFile must be absolute");
                 check_public_trust_file(file).context("invalid pinned JWKS file")?;
@@ -148,17 +151,26 @@ impl RemoteJwtVerifier {
             }
             (None, Some(address)) => {
                 let url = Url::parse(&address).context("invalid administrator-pinned jwksUrl")?;
-                ensure!(url.scheme() == "https"
-                    && url.host_str().is_some()
-                    && url.username().is_empty()
-                    && url.password().is_none()
-                    && url.fragment().is_none()
-                    && url.query().is_none()
-                    && !url.path().contains(".."),
-                    "jwksUrl must be a fixed HTTPS endpoint");
-                let refresh = config.jwks_refresh_seconds.context("online JWKS requires jwksRefreshSeconds")?;
-                ensure!((30..=3600).contains(&refresh), "JWKS refresh bounds must be 30–3600 seconds");
-                let ca_path = config.jwks_ca_certificate_file.context("online JWKS requires jwksCaCertificateFile")?;
+                ensure!(
+                    url.scheme() == "https"
+                        && url.host_str().is_some()
+                        && url.username().is_empty()
+                        && url.password().is_none()
+                        && url.fragment().is_none()
+                        && url.query().is_none()
+                        && !url.path().contains(".."),
+                    "jwksUrl must be a fixed HTTPS endpoint"
+                );
+                let refresh = config
+                    .jwks_refresh_seconds
+                    .context("online JWKS requires jwksRefreshSeconds")?;
+                ensure!(
+                    (30..=3600).contains(&refresh),
+                    "JWKS refresh bounds must be 30–3600 seconds"
+                );
+                let ca_path = config
+                    .jwks_ca_certificate_file
+                    .context("online JWKS requires jwksCaCertificateFile")?;
                 let ca = Path::new(&ca_path);
                 ensure!(ca.is_absolute(), "JWKS CA must use an absolute path");
                 check_public_trust_file(ca).context("invalid JWKS pinned TLS CA")?;
@@ -174,18 +186,29 @@ impl RemoteJwtVerifier {
                     .add_root_certificate(root)
                     .user_agent("HostMarshal/0.1")
                     .build()?;
-                (BTreeMap::new(), Some(OnlineKeys {
-                    client, url,
-                    refresh: Duration::from_secs(refresh),
-                    state: Mutex::new(OnlineState { keys: BTreeMap::new(), valid_until: None }),
-                }))
+                (
+                    BTreeMap::new(),
+                    Some(OnlineKeys {
+                        client,
+                        url,
+                        refresh: Duration::from_secs(refresh),
+                        state: Mutex::new(OnlineState {
+                            keys: BTreeMap::new(),
+                            valid_until: None,
+                        }),
+                    }),
+                )
             }
             _ => anyhow::bail!("configure exactly one jwksFile or jwksUrl"),
         };
         let public_url = Url::parse(&config.audience)?;
-        ensure!(public_url.path() == "/mcp" && public_url.query().is_none(),
-            "remote MCP audience must identify the public /mcp resource");
-        let metadata_url = public_url.join("/.well-known/oauth-protected-resource/mcp")?.to_string();
+        ensure!(
+            public_url.path() == "/mcp" && public_url.query().is_none(),
+            "remote MCP audience must identify the public /mcp resource"
+        );
+        let metadata_url = public_url
+            .join("/.well-known/oauth-protected-resource/mcp")?
+            .to_string();
         let ingress = match config.ingress {
             Some(ingress) => {
                 ensure!(ingress.mode == "trustedProxy", "unsupported ingress mode");
@@ -194,15 +217,25 @@ impl RemoteJwtVerifier {
                     Some(port) => format!("{expected_host}:{port}"),
                     None => expected_host.to_owned(),
                 };
-                ensure!(ingress.public_host == expected_host, "ingress publicHost must match audience authority");
+                ensure!(
+                    ingress.public_host == expected_host,
+                    "ingress publicHost must match audience authority"
+                );
                 let proof_file = Path::new(&ingress.proof_file);
                 check_private_key_file(proof_file).context("ingress proof file not protected")?;
                 let proof = fs::read(proof_file)?;
                 let proof = proof.strip_suffix(b"\n").unwrap_or(&proof);
-                ensure!(proof.len() >= 32 && proof.len() <= 256
-                    && proof.iter().all(u8::is_ascii_graphic), "invalid ingress proof length/characters");
+                ensure!(
+                    proof.len() >= 32
+                        && proof.len() <= 256
+                        && proof.iter().all(u8::is_ascii_graphic),
+                    "invalid ingress proof length/characters"
+                );
                 let digest: [u8; 32] = Sha256::digest(proof).into();
-                Some(IngressProof { public_host: ingress.public_host, digest })
+                Some(IngressProof {
+                    public_host: ingress.public_host,
+                    digest,
+                })
             }
             None => None,
         };
@@ -237,21 +270,30 @@ impl RemoteJwtVerifier {
     /// The bearer token NEVER selects a key URL, proxy, issuer, or trust root.
     /// A direct request to loopback cannot satisfy the protected proxy contract.
     pub fn verify_ingress(&self, headers: &HeaderMap) -> bool {
-        let Some(ingress) = &self.ingress else { return true; };
+        let Some(ingress) = &self.ingress else {
+            return true;
+        };
         fn sole<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
             let mut values = headers.get_all(name).iter();
             let first = values.next()?.to_str().ok()?;
-            if values.next().is_some() { return None; }
+            if values.next().is_some() {
+                return None;
+            }
             Some(first)
         }
         if sole(headers, "x-forwarded-proto") != Some("https")
-            || sole(headers, "x-forwarded-host") != Some(&ingress.public_host) {
+            || sole(headers, "x-forwarded-host") != Some(&ingress.public_host)
+        {
             return false;
         }
-        let Some(proof) = sole(headers, "x-hostmarshal-ingress-proof") else { return false; };
+        let Some(proof) = sole(headers, "x-hostmarshal-ingress-proof") else {
+            return false;
+        };
         let actual: [u8; 32] = Sha256::digest(proof.as_bytes()).into();
         let mut diff = 0_u8;
-        for (a, b) in actual.iter().zip(&ingress.digest) { diff |= a ^ b; }
+        for (a, b) in actual.iter().zip(&ingress.digest) {
+            diff |= a ^ b;
+        }
         diff == 0
     }
 
@@ -324,18 +366,33 @@ impl RemoteJwtVerifier {
 
 fn parse_jwks(bytes: &[u8]) -> Result<BTreeMap<String, DecodingKey>> {
     let jwks: JwkFile = serde_json::from_slice(bytes)?;
-    ensure!(!jwks.keys.is_empty() && jwks.keys.len() <= 16, "invalid JWKS key count");
+    ensure!(
+        !jwks.keys.is_empty() && jwks.keys.len() <= 16,
+        "invalid JWKS key count"
+    );
     let mut keys = BTreeMap::new();
     for jwk in jwks.keys {
-        ensure!(jwk.kty == "RSA" && jwk.alg == "RS256" && jwk.key_use == "sig",
-            "only RSA RS256 signing keys accepted");
-        ensure!(jwk.key_ops.as_ref().is_none_or(|ops| ops.len() == 1 && ops[0] == "verify"),
-            "JWKS key operations must be verify-only");
-        ensure!(!jwk.kid.is_empty() && jwk.kid.len() <= 128
-            && jwk.kid.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.')),
-            "invalid JWT key ID");
-        let key = DecodingKey::from_rsa_components(&jwk.n, &jwk.e)
-            .context("invalid pinned RSA key")?;
+        ensure!(
+            jwk.kty == "RSA" && jwk.alg == "RS256" && jwk.key_use == "sig",
+            "only RSA RS256 signing keys accepted"
+        );
+        ensure!(
+            jwk.key_ops
+                .as_ref()
+                .is_none_or(|ops| ops.len() == 1 && ops[0] == "verify"),
+            "JWKS key operations must be verify-only"
+        );
+        ensure!(
+            !jwk.kid.is_empty()
+                && jwk.kid.len() <= 128
+                && jwk
+                    .kid
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.')),
+            "invalid JWT key ID"
+        );
+        let key =
+            DecodingKey::from_rsa_components(&jwk.n, &jwk.e).context("invalid pinned RSA key")?;
         ensure!(keys.insert(jwk.kid, key).is_none(), "duplicate JWT key ID");
     }
     Ok(keys)
@@ -344,24 +401,36 @@ fn parse_jwks(bytes: &[u8]) -> Result<BTreeMap<String, DecodingKey>> {
 impl OnlineKeys {
     async fn key(&self, kid: &str) -> Result<DecodingKey> {
         let mut state = self.state.lock().await;
-        if !state.valid_until.is_some_and(|until| Instant::now() < until) {
+        if !state
+            .valid_until
+            .is_some_and(|until| Instant::now() < until)
+        {
             // Refresh is serialized: a failed fetch never extends trust in
             // removed/stale keys, and no stale-on-error fallback is enabled.
             state.valid_until = None;
             let response = self.client.get(self.url.clone()).send().await?;
-            ensure!(response.status().is_success() && response.url() == self.url,
-                "untrusted JWKS response or redirect");
+            ensure!(
+                response.status().is_success() && response.url() == self.url,
+                "untrusted JWKS response or redirect"
+            );
             let mut response = response;
             let mut bytes = Vec::new();
             while let Some(chunk) = response.chunk().await? {
-                ensure!(bytes.len().saturating_add(chunk.len()) <= 32 * 1024, "online JWKS exceeds limit");
+                ensure!(
+                    bytes.len().saturating_add(chunk.len()) <= 32 * 1024,
+                    "online JWKS exceeds limit"
+                );
                 bytes.extend_from_slice(&chunk);
             }
             let next = parse_jwks(&bytes)?;
             state.keys = next;
             state.valid_until = Some(Instant::now() + self.refresh);
         }
-        state.keys.get(kid).cloned().context("untrusted or rotated JWT key ID")
+        state
+            .keys
+            .get(kid)
+            .cloned()
+            .context("untrusted or rotated JWT key ID")
     }
 }
 
@@ -377,7 +446,8 @@ mod tests {
             keys: BTreeMap::new(),
             online: None,
             ingress: None,
-            metadata_url: "https://mcp.example.invalid/.well-known/oauth-protected-resource/mcp".to_owned(),
+            metadata_url:
+                "https://mcp.example.invalid/.well-known/oauth-protected-resource/mcp".to_owned(),
         };
         for header in ["", "Basic anything", "Bearer ", "Bearer a/b", "bearer abc"] {
             assert!(verifier.authenticate_header(header).await.is_err());

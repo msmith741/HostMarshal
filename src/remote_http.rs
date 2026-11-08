@@ -4,10 +4,9 @@ use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::{Result, ensure};
 use axum::{
-    Router,
+    Json, Router,
     extract::{Request, State},
     http::{Method, StatusCode, header},
-    Json,
     middleware::{self, Next},
     response::{IntoResponse, Response},
 };
@@ -148,7 +147,8 @@ async fn require_bearer(
         return (
             [(header::CACHE_CONTROL, "no-store")],
             Json(state.verifier.resource_metadata()),
-        ).into_response();
+        )
+            .into_response();
     }
     if request.method() != Method::POST {
         return reject(
@@ -170,15 +170,30 @@ async fn require_bearer(
     let mut bearer_values = request.headers().get_all(header::AUTHORIZATION).iter();
     let authorization = bearer_values.next().and_then(|value| value.to_str().ok());
     if bearer_values.next().is_some() {
-        return reject(&state, HttpRejection::DuplicateBearer, None, unauthorized(&state));
+        return reject(
+            &state,
+            HttpRejection::DuplicateBearer,
+            None,
+            unauthorized(&state),
+        );
     }
     let Some(authorization) = authorization else {
-        return reject(&state, HttpRejection::MissingBearer, None, unauthorized(&state));
+        return reject(
+            &state,
+            HttpRejection::MissingBearer,
+            None,
+            unauthorized(&state),
+        );
     };
     let caller = match state.verifier.authenticate_header(authorization).await {
         Ok(identity) => identity,
         Err(_) => {
-            return reject(&state, HttpRejection::InvalidBearer, None, unauthorized(&state));
+            return reject(
+                &state,
+                HttpRejection::InvalidBearer,
+                None,
+                unauthorized(&state),
+            );
         }
     };
     // Insert only cryptographically authenticated identity into request
@@ -234,7 +249,10 @@ pub async fn serve_loopback(
         runtime: audit_runtime,
     });
     let router = Router::new()
-        .route("/.well-known/oauth-protected-resource/mcp", axum::routing::get(|| async { StatusCode::METHOD_NOT_ALLOWED }))
+        .route(
+            "/.well-known/oauth-protected-resource/mcp",
+            axum::routing::get(|| async { StatusCode::METHOD_NOT_ALLOWED }),
+        )
         .nest_service("/mcp", service)
         .layer(RequestBodyLimitLayer::new(256 * 1024))
         .layer(middleware::from_fn_with_state(state, require_bearer));
