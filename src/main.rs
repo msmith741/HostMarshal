@@ -244,7 +244,11 @@ async fn serve_declarative(
     // No MCP message can choose or modify either value.
     let caller = AuthenticatedCaller::from_trusted_launcher(principal)?;
     let config = CompiledConfig::load(Path::new(directory))?;
-    let audit = open_audit(audit_options.log, audit_options.evidence, audit_options.delivery)?;
+    let audit = open_audit(
+        audit_options.log,
+        audit_options.evidence,
+        audit_options.delivery,
+    )?;
     let broker = choose_broker(&config, ssh_map, vault_ssh, Arc::clone(&audit))?;
     let store = Arc::new(ConfigStore::new(config));
     let runtime = Arc::new(ExecutionCoordinator::new(Arc::clone(&store), broker, audit));
@@ -314,7 +318,11 @@ async fn serve_remote_http(
     let verifier = Arc::new(RemoteJwtVerifier::load(Path::new(auth_file))?);
     verifier.validate_authorization_server().await?;
     let config = CompiledConfig::load(Path::new(directory))?;
-    let audit = open_audit(audit_options.log, audit_options.evidence, audit_options.delivery)?;
+    let audit = open_audit(
+        audit_options.log,
+        audit_options.evidence,
+        audit_options.delivery,
+    )?;
     let broker = choose_broker(&config, ssh_map, vault_ssh, Arc::clone(&audit))?;
     let store = Arc::new(ConfigStore::new(config));
     let runtime = Arc::new(ExecutionCoordinator::new(Arc::clone(&store), broker, audit));
