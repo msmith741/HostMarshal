@@ -126,6 +126,41 @@ def main():
             api("GET", "sys/mounts", token=restricted, statuses=(403,))
             api("GET", "ssh/roles/read-only", token=restricted, statuses=(403,))
 
+            # Verify *actual* Vault sign API/role independently before testing
+            # HostMarshal. The signing key is disposable and its private half
+            # is never passed to Vault. Never print tokens, keys, or responses.
+            probe_key = root / "probe_key"
+            subprocess.run(
+                ["ssh-keygen", "-q", "-t", "ed25519", "-N", "",
+                 "-f", str(probe_key)],
+                capture_output=True, check=True, timeout=10,
+            )
+            signed = api("POST", "ssh/sign/read-only", {
+                "public_key": (root / "probe_key.pub").read_text(),
+                "valid_principals": USER,
+                "cert_type": "user",
+                "ttl": "90s",
+                "key_id": "hostmarshal-" + TARGET,
+                "extensions": {},
+            }, restricted)["data"]["signed_key"]
+            probe_cert = root / "probe_key-cert.pub"
+            probe_cert.write_text(signed + "\n")
+            properties = subprocess.run(
+                ["ssh-keygen", "-Lf", str(probe_cert)],
+                capture_output=True, text=True, check=True, timeout=10,
+            ).stdout
+            assert "Type:" in properties and "user certificate" in properties, properties
+            # The exact authorized principal is not an SSH certificate option.
+            assert USER in properties and "Principals:" in properties, properties
+            print(
+                "Real Vault signing preflight: ",
+                " | ".join(line.strip() for line in properties.splitlines()
+                           if any(field in line for field in
+                                  ["Type:", "Valid:", "Principals:",
+                                   "Critical Options:", "Extensions:"])),
+                flush=True,
+            )
+
             sshd, ssh_port, known_hosts = start_certificate_sshd(root)
             config = root / "config"
             config.mkdir()
