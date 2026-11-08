@@ -6,6 +6,7 @@ use std::{
     future::Future,
     path::{Path, PathBuf},
     pin::Pin,
+    time::{Duration, SystemTime},
 };
 
 use anyhow::{Context, Result, ensure};
@@ -42,6 +43,12 @@ impl CredentialScope {
 pub struct CredentialLease {
     scope: CredentialScope,
     opaque_handle: String,
+    certificate_path: Option<PathBuf>,
+    certificate_principal: Option<String>,
+    expires_at: Option<SystemTime>,
+    // Owns generated private-key/certificate files. Drop removes them on
+    // success, error, cancellation and adapter timeout.
+    _ephemeral_dir: Option<tempfile::TempDir>,
 }
 
 impl CredentialLease {
@@ -49,12 +56,53 @@ impl CredentialLease {
         Self {
             scope,
             opaque_handle: handle,
+            certificate_path: None,
+            certificate_principal: None,
+            expires_at: None,
+            _ephemeral_dir: None,
         }
     }
 
     #[cfg(test)]
     pub(crate) fn for_test(scope: CredentialScope, handle: &str) -> Self {
         Self::new_scoped(scope, handle.to_owned())
+    }
+
+    pub(crate) fn new_ephemeral_ssh_certificate(
+        scope: CredentialScope,
+        directory: tempfile::TempDir,
+        identity_path: PathBuf,
+        certificate_path: PathBuf,
+        principal: String,
+        expires_at: SystemTime,
+    ) -> Self {
+        Self {
+            scope,
+            opaque_handle: identity_path.to_string_lossy().into_owned(),
+            certificate_path: Some(certificate_path),
+            certificate_principal: Some(principal),
+            expires_at: Some(expires_at),
+            _ephemeral_dir: Some(directory),
+        }
+    }
+
+    pub fn certificate_path(&self) -> Option<&Path> {
+        self.certificate_path.as_deref()
+    }
+
+    pub fn certificate_principal(&self) -> Option<&str> {
+        self.certificate_principal.as_deref()
+    }
+
+    pub fn expires_at(&self) -> Option<SystemTime> {
+        self.expires_at
+    }
+
+    /// A temporary SSH cert must remain valid through the full remaining
+    /// adapter deadline and skew margin; static keys have no expiry metadata.
+    pub fn valid_for(&self, duration: Duration) -> bool {
+        self.expires_at
+            .is_none_or(|expiry| SystemTime::now().checked_add(duration).is_some_and(|until| expiry > until))
     }
 
     pub fn scope(&self) -> &CredentialScope {
@@ -210,6 +258,28 @@ pub fn check_private_key_file(path: &Path) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ephemeral_lease_cleans_up_material_and_enforces_expiry() {
+        let tmp = tempfile::Builder::new().prefix("hm-lease-test").tempdir().unwrap();
+        let identity = tmp.path().join("identity");
+        let cert = tmp.path().join("identity-cert.pub");
+        std::fs::write(&identity, b"test-private-key").unwrap();
+        std::fs::write(&cert, b"test-certificate").unwrap();
+        let expires = SystemTime::now() + Duration::from_secs(30);
+        let lease = CredentialLease::new_ephemeral_ssh_certificate(
+            CredentialScope::new("builtin.linux.uname/v1", "host-a", "ssh-observe"),
+            tmp, identity.clone(), cert.clone(), "observer".into(), expires,
+        );
+        assert_eq!(lease.certificate_principal(), Some("observer"));
+        assert_eq!(lease.certificate_path(), Some(cert.as_path()));
+        assert!(lease.valid_for(Duration::from_secs(5)));
+        assert!(!lease.valid_for(Duration::from_secs(40)));
+        assert!(!format!("{lease:?}").contains("hm-lease-test"));
+        drop(lease);
+        assert!(!identity.exists());
+        assert!(!cert.exists());
+    }
+
     #[test]
     fn credential_lease_debug_never_exposes_handle() {
         let lease = CredentialLease::new_scoped(

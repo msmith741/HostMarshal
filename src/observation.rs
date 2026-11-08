@@ -42,6 +42,11 @@ impl OperationAdapter for LinuxUname {
             let identity = Path::new(lease.opaque_handle());
             if check_public_trust_file(known_hosts).is_err()
                 || crate::credentials::check_private_key_file(identity).is_err()
+                || !lease.valid_for(std::time::Duration::from_secs(10))
+                || lease.certificate_principal().is_some_and(|user| user != endpoint.user)
+                || lease.certificate_path().is_some_and(|cert| {
+                    check_public_trust_file(cert).is_err()
+                })
             {
                 return Err(AdapterFailure::Rejected);
             }
@@ -102,6 +107,11 @@ impl OperationAdapter for LinuxUname {
                 .stderr(Stdio::null())
                 .kill_on_drop(true);
 
+            // Explicitly bind the short-lived cert to this private key. Without
+            // a cert, M3's protected local-key behavior is preserved.
+            if let Some(cert) = lease.certificate_path() {
+                command.arg("-o").arg(format!("CertificateFile={}", cert.display()));
+            }
             let mut child = command.spawn().map_err(|_| AdapterFailure::Unavailable)?;
             let stdout = child.stdout.take().ok_or(AdapterFailure::Failed)?;
             let mut data = Vec::with_capacity(32);

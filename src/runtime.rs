@@ -295,7 +295,14 @@ impl ExecutionCoordinator {
             CredentialRequirement::Scoped { purpose } => {
                 let expected = CredentialScope::new(desc.id, &target, purpose);
                 match timeout_at(deadline, self.broker.acquire(expected.clone())).await {
-                    Ok(Ok(received)) if received.scope() == &expected => Some(received),
+                    Ok(Ok(received)) if received.scope() == &expected => {
+                        let needed = deadline.saturating_duration_since(Instant::now())
+                            + std::time::Duration::from_secs(5);
+                        if !received.valid_for(needed) {
+                            return self.fail(&event, RuntimeFailure::BrokerUnavailable);
+                        }
+                        Some(received)
+                    },
                     Err(_) => return self.fail(&event, RuntimeFailure::TimedOut),
                     _ => return self.fail(&event, RuntimeFailure::BrokerUnavailable),
                 }
